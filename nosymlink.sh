@@ -7,7 +7,7 @@ for LIBSOURCE in $LIBSOURCES; do
   cp "conf/${LIBSOURCE}" "obj/conf/${LIBSOURCE}"
 done
 
-LIBSOURCES="timer.h endian.h unix.h log.c io.c sysio.h"
+LIBSOURCES="timer.h endian.h unix.h log.c io.c sysio.h random.c missing.h krt.h krt.c krt-sys.h main.c krt-win.c"
 
 for LIBSOURCE in $LIBSOURCES; do
   rm "obj/lib/${LIBSOURCE}"

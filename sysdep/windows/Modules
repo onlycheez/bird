@@ -4,4 +4,12 @@ endian.h
 log.c
 io.c
 sysio.h
+random.c
 config.Y
+missing.h
+krt.c
+krt.h
+krt.Y
+krt-sys.h
+main.c
+krt-win.c

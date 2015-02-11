@@ -167,7 +167,8 @@ sk_prepare_cmsgs4(sock *s, struct msghdr *msg, void *cbuf, size_t cbuflen)
 
   pi = (struct in_pktinfo *) CMSG_DATA(cm);
   pi->ipi_ifindex = s->iface ? s->iface->index : 0;
-  pi->ipi_spec_dst = ipa_to_in4(s->saddr);
+//WIN pi->ipi_spec_dst = ipa_to_in4(s->saddr);
+//WIN struct in_pktinfo doesn't define ipi_spec_dst member
   pi->ipi_addr = ipa_to_in4(IPA_NONE);
 
   msg->msg_controllen = controllen;

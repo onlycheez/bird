@@ -11,6 +11,7 @@
    if _GNU_SOURCE is not defined. */
 #define _GNU_SOURCE 1
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -26,7 +27,8 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
-#include <netinet/icmp6.h>
+//WIN #include <netinet/icmp6.h>
+//WIN Cygwin doesn't have netinet/icmp6.h
 
 #include "nest/bird.h"
 #include "lib/lists.h"
@@ -35,6 +37,7 @@
 #include "lib/socket.h"
 #include "lib/event.h"
 #include "lib/string.h"
+#include "lib/missing.h"
 #include "nest/iface.h"
 
 #include "lib/unix.h"
