@@ -59,16 +59,6 @@ if test "$given_suffix" = yes ; then
 fi
 AC_SUBST(SUFFIX)
 
-if test "$enable_debug" = yes ; then
-	CONFIG_FILE="bird$SUFFIX.conf"
-	CONTROL_SOCKET="bird$SUFFIX.ctl"
-else
-	CONFIG_FILE="\$(sysconfdir)/bird$SUFFIX.conf"
-	CONTROL_SOCKET="$runtimedir/bird$SUFFIX.ctl"
-fi
-AC_SUBST(CONFIG_FILE)
-AC_SUBST(CONTROL_SOCKET)
-
 AC_SEARCH_LIBS(clock_gettime, [c rt posix4], ,
 	AC_MSG_ERROR([[Function clock_gettime not available.]]))
 
@@ -179,10 +169,10 @@ else
 		ipv4:openbsd*)	sysdesc=bsd
 				;;
 		ipv6:windows*|ipv6:cygwin*)	sysdesc=windows-v6
-						AC_DEFINE(WINDOWS)
+						windows_platform=yes
 				;;
 		ipv4:windows*|ipv4:cygwin*)	sysdesc=windows
-						AC_DEFINE(WINDOWS)
+						windows_platform=yes
 				;;
 		*)		AC_MSG_ERROR([Cannot determine correct system configuration. Please use --with-sysconfig to set it manually.])
 				;;
@@ -201,6 +191,23 @@ AC_MSG_CHECKING([system-dependent directories])
 sysdep_dirs="`sed <$sysdesc '/^Link: /!d;s/^Link: \(.*\)$/\1/' | tr '\012' ' '` lib"
 AC_MSG_RESULT($sysdep_dirs)
 AC_SUBST(sysdep_dirs)
+
+if test "$windows_platform" = yes ; then
+	AC_DEFINE(WINDOWS)
+fi
+
+if test "$enable_debug" = yes ; then
+	CONFIG_FILE="bird$SUFFIX.conf"
+	CONTROL_SOCKET="bird$SUFFIX.ctl"
+elif test "$windows_platform" = yes ; then
+	CONFIG_FILE="$prefix/bird$SUFFIX.conf"
+	CONTROL_SOCKET="$prefix/bird$SUFFIX.ctl"
+else
+	CONFIG_FILE="\$(sysconfdir)/bird$SUFFIX.conf"
+	CONTROL_SOCKET="$runtimedir/bird$SUFFIX.ctl"
+fi
+AC_SUBST(CONFIG_FILE)
+AC_SUBST(CONTROL_SOCKET)
 
 if test "$with_iproutedir" = no ; then with_iproutedir= ; fi
 
