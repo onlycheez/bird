@@ -14,5 +14,6 @@
 #define CONFIG_NO_IFACE_BIND
 
 /*
+Link: sysdep/unix
 Link: sysdep/windows
  */

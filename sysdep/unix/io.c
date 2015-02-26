@@ -26,7 +26,12 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include "sysdep/config.h"
+#ifdef WINDOWS
+#include "lib/missing.h"
+#else
 #include <netinet/icmp6.h>
+#endif
 
 #include "nest/bird.h"
 #include "lib/lists.h"
@@ -1282,7 +1287,7 @@ sk_passive_connected(sock *s, int type)
     log(L_ERR "SOCK: Incoming connection: %s%#m", t->err);
 
     /* FIXME: handle it better in rfree() */
-    close(t->fd);	
+    close(t->fd);
     t->fd = -1;
     rfree(t);
     return 1;
@@ -1325,7 +1330,7 @@ sk_open(sock *s)
     bind_addr = s->saddr;
     do_bind = bind_port || ipa_nonzero(bind_addr);
     break;
-  
+
   case SK_UDP:
     fd = socket(af, SOCK_DGRAM, IPPROTO_UDP);
     bind_port = s->sport;
@@ -1638,7 +1643,7 @@ sk_rx_ready(sock *s)
 
  redo:
   rv = select(s->fd+1, &rd, &wr, NULL, &timo);
-  
+
   if ((rv < 0) && (errno == EINTR || errno == EAGAIN))
     goto redo;
 

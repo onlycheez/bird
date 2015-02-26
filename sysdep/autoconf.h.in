@@ -6,6 +6,9 @@
 /* System configuration file */
 #define SYSCONF_INCLUDE ?
 
+/* Defined when compiled under Windows */
+#undef WINDOWS
+
 /* Include debugging code */
 #undef DEBUGGING
 

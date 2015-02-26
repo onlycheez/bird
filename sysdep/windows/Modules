@@ -1,15 +1,4 @@
-timer.h
-unix.h
-endian.h
-log.c
-io.c
-sysio.h
-random.c
-config.Y
 missing.h
-krt.c
-krt.h
-krt.Y
+sysio.h
 krt-sys.h
-main.c
 krt-win.c

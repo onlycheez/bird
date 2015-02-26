@@ -179,8 +179,10 @@ else
 		ipv4:openbsd*)	sysdesc=bsd
 				;;
 		ipv6:windows*|ipv6:cygwin*)	sysdesc=windows-v6
+						AC_DEFINE(WINDOWS)
 				;;
 		ipv4:windows*|ipv4:cygwin*)	sysdesc=windows
+						AC_DEFINE(WINDOWS)
 				;;
 		*)		AC_MSG_ERROR([Cannot determine correct system configuration. Please use --with-sysconfig to set it manually.])
 				;;
