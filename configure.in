@@ -307,6 +307,11 @@ AC_OUTPUT
 
 rm -f $objdir/sysdep/paths.h
 
+if test "$windows_platform" = yes ; then
+	echo "Ratataat"
+	$srcdir/tools/replacesymlinks "$srcdir"
+fi
+
 cat >&AC_FD_MSG <<EOF
 
 BIRD was configured with the following options:

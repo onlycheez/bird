@@ -1,0 +1,26 @@
+#!/bin/sh
+
+if [ $# -ne 1 ]; then
+	echo "Usage: replacesymlinks <srcdir>"
+	exit 1
+fi
+
+SRCDIR="$1"
+
+SOURCES="cf-lex.l conf.c conf.h"
+
+for SOURCE in $SOURCES; do
+	rm "${SRCDIR}/obj/conf/${SOURCE}"
+	cp "${SRCDIR}/conf/${SOURCE}" "${SRCDIR}/obj/conf/${SOURCE}"
+done
+
+DIRS="sysdep/unix sysdep/windows lib"
+
+for DIR in $DIRS; do
+	SOURCES="`ls ${SRCDIR}/${DIR}/*.{c,h}`"
+	for SOURCE in $SOURCES; do
+		SOURCE="${SOURCE##*/}"
+		rm "${SRCDIR}/obj/lib/${SOURCE}"
+		cp "${SRCDIR}/${DIR}/${SOURCE}" "${SRCDIR}/obj/lib/${SOURCE}"
+	done
+done
