@@ -101,7 +101,7 @@ ALPHA [a-zA-Z_]
 DIGIT [0-9]
 XIGIT [0-9a-fA-F]
 ALNUM [a-zA-Z_0-9]
-WHITE [ \t]
+WHITE [ \t\r]
 include   ^{WHITE}*include{WHITE}*\".*\"{WHITE}*;
 
 %%
@@ -563,7 +563,7 @@ cf_lex_init(int is_cli, struct config *c)
     cf_lex_init_kh();
 
   ifs_head = ifs = push_ifs(NULL);
-  if (!is_cli) 
+  if (!is_cli)
     {
       ifs->file_name = c->file_name;
       ifs->fd = c->file_fd;
