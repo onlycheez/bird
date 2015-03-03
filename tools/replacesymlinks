@@ -14,7 +14,7 @@ for SOURCE in $SOURCES; do
 	cp "${SRCDIR}/conf/${SOURCE}" "${SRCDIR}/obj/conf/${SOURCE}"
 done
 
-DIRS="sysdep/unix sysdep/windows lib"
+DIRS="sysdep/unix sysdep/cygwin lib"
 
 for DIR in $DIRS; do
 	SOURCES="`ls ${SRCDIR}/${DIR}/*.{c,h}`"

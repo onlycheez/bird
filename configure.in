@@ -168,11 +168,11 @@ else
 				;;
 		ipv4:openbsd*)	sysdesc=bsd
 				;;
-		ipv6:windows*|ipv6:cygwin*)	sysdesc=windows-v6
-						windows_platform=yes
+		ipv6:cygwin*)	sysdesc=cygwin-v6
+				using_cygwin=yes
 				;;
-		ipv4:windows*|ipv4:cygwin*)	sysdesc=windows
-						windows_platform=yes
+		ipv4:cygwin*)	sysdesc=cygwin
+				using_cygwin=yes
 				;;
 		*)		AC_MSG_ERROR([Cannot determine correct system configuration. Please use --with-sysconfig to set it manually.])
 				;;
@@ -192,14 +192,14 @@ sysdep_dirs="`sed <$sysdesc '/^Link: /!d;s/^Link: \(.*\)$/\1/' | tr '\012' ' '` 
 AC_MSG_RESULT($sysdep_dirs)
 AC_SUBST(sysdep_dirs)
 
-if test "$windows_platform" = yes ; then
-	AC_DEFINE(WINDOWS)
+if test "$using_cygwin" = yes ; then
+	AC_DEFINE(BIRD_CYGWIN)
 fi
 
 if test "$enable_debug" = yes ; then
 	CONFIG_FILE="bird$SUFFIX.conf"
 	CONTROL_SOCKET="bird$SUFFIX.ctl"
-elif test "$windows_platform" = yes ; then
+elif test "$using_cygwin" = yes ; then
 	CONFIG_FILE="$prefix/bird$SUFFIX.conf"
 	CONTROL_SOCKET="$prefix/bird$SUFFIX.ctl"
 else
@@ -307,7 +307,7 @@ AC_OUTPUT
 
 rm -f $objdir/sysdep/paths.h
 
-if test "$windows_platform" = yes ; then
+if test "$using_cygwin" = yes ; then
 	$srcdir/tools/replacesymlinks "$srcdir"
 fi
 

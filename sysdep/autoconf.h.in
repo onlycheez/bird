@@ -6,8 +6,8 @@
 /* System configuration file */
 #define SYSCONF_INCLUDE ?
 
-/* Defined when compiled under Windows */
-#undef WINDOWS
+/* Defined when compiled in Cygwin */
+#undef BIRD_CYGWIN
 
 /* Include debugging code */
 #undef DEBUGGING
