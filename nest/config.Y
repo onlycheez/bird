@@ -307,7 +307,7 @@ tos:
 CF_ADDTO(proto, dev_proto '}')
 
 dev_proto_start: proto_start DIRECT {
-     this_proto = proto_config_new(&proto_device, sizeof(struct rt_dev_config), $1);
+     this_proto = proto_config_new(&proto_device, $1);
      init_list(&DIRECT_CFG->iface_list);
    }
  ;
@@ -621,6 +621,8 @@ CF_CLI(DUMP RESOURCES,,, [[Dump all allocated resource]])
 { rdump(&root_pool); cli_msg(0, ""); } ;
 CF_CLI(DUMP SOCKETS,,, [[Dump open sockets]])
 { sk_dump_all(); cli_msg(0, ""); } ;
+CF_CLI(DUMP EVENTS,,, [[Dump event log]])
+{ io_log_dump(); cli_msg(0, ""); } ;
 CF_CLI(DUMP INTERFACES,,, [[Dump interface information]])
 { if_dump_all(); cli_msg(0, ""); } ;
 CF_CLI(DUMP NEIGHBORS,,, [[Dump neighbor cache]])
