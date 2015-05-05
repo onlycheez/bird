@@ -9,6 +9,7 @@
 #include "nest/protocol.h"
 #include "nest/iface.h"
 #include "lib/krt.h"
+#include "libwin/libwin.h"
 
 void
 kif_sys_start(struct kif_proto *p UNUSED)
@@ -25,7 +26,7 @@ kif_sys_shutdown(struct kif_proto *p)
 void
 kif_do_scan(struct kif_proto *p UNUSED)
 {
-
+  win_if_scan();
 }
 
 void

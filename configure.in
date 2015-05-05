@@ -194,6 +194,7 @@ AC_SUBST(sysdep_dirs)
 
 if test "$using_cygwin" = yes ; then
 	AC_DEFINE(BIRD_CYGWIN)
+	WIN_LIBS="$srcdir/libwin/libwin.a"
 fi
 
 if test "$enable_debug" = yes ; then
