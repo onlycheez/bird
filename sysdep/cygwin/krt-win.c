@@ -4,12 +4,17 @@
  *	Can be freely distributed and used under the terms of the GNU GPL.
  */
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
 #include "nest/bird.h"
 #include "nest/route.h"
 #include "nest/protocol.h"
 #include "nest/iface.h"
 #include "lib/krt.h"
 #include "libwin/libwin.h"
+#include "libwin/wstructs.h"
 
 void
 kif_sys_start(struct kif_proto *p UNUSED)
@@ -23,10 +28,64 @@ kif_sys_shutdown(struct kif_proto *p)
 
 }
 
+static struct iface* wstruct_convert_iface(struct wiface *wif)
+{
+  struct iface *f = xmalloc(sizeof(struct iface));
+  memset(f, 0, sizeof(struct iface));
+  memset(f->name, 0, sizeof(f->name));
+
+  memcpy(f->name, wif->name, strlen(wif->name));
+  f->index = (unsigned)wif->index;
+  f->mtu = (unsigned)wif->mtu;
+
+
+  // TODO: Setting flags.
+  if (!(wif->flags & 0x10))
+  {
+    f->flags |= IF_MULTICAST;
+  }
+
+  if (wif->oper_status == 1)
+  {
+    f->flags |= IF_UP;
+    f->flags |= IF_ADMIN_UP;
+  }
+  else if (wif->oper_status == 7)
+  {
+  }
+
+  return f;
+}
+
 void
 kif_do_scan(struct kif_proto *p UNUSED)
 {
-  win_if_scan();
+  struct wiface *wif;
+  struct iface *f;
+
+  if_start_update();
+
+#ifdef IPV6
+  win_if_scan(6);
+#else
+  win_if_scan(4);
+#endif
+
+  while (wif = win_if_next())
+  {
+    printf("wif index: %lu\n", wif->index);
+    printf("wif name: %s\n", wif->name);
+    printf("wif mtu: %lu\n", wif->mtu);
+
+    f = wstruct_convert_iface(wif);
+    free(wif->name);
+    free(wif);
+
+    if_update(f);
+    // TODO: Delete removed interfaces
+  }
+
+  if_end_update();
 }
 
 void

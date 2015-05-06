@@ -30,7 +30,7 @@ struct ifa {				/* Interface address */
 
 struct iface {
   node n;
-  char name[16];
+  char name[40];
   unsigned flags;
   unsigned mtu;
   unsigned index;			/* OS-dependent interface index */
