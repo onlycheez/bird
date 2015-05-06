@@ -1,9 +1,9 @@
 /*
- *	BIRD -- Linux Netlink Interface
+ *        BIRD -- Linux Netlink Interface
  *
- *	(c) 1999--2000 Martin Mares <mj@ucw.cz>
+ *        (c) 1999--2000 Martin Mares <mj@ucw.cz>
  *
- *	Can be freely distributed and used under the terms of the GNU GPL.
+ *        Can be freely distributed and used under the terms of the GNU GPL.
  */
 
 #include <stdio.h>
@@ -32,7 +32,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
-#ifndef MSG_TRUNC			/* Hack: Several versions of glibc miss this one :( */
+#ifndef MSG_TRUNC                        /* Hack: Several versions of glibc miss this one :( */
 #define MSG_TRUNC 0x20
 #endif
 
@@ -41,22 +41,22 @@
 #endif
 
 /*
- *	Synchronous Netlink interface
+ *        Synchronous Netlink interface
  */
 
 struct nl_sock
 {
   int fd;
   u32 seq;
-  byte *rx_buffer;			/* Receive buffer */
-  struct nlmsghdr *last_hdr;		/* Recently received packet */
+  byte *rx_buffer;                        /* Receive buffer */
+  struct nlmsghdr *last_hdr;                /* Recently received packet */
   unsigned int last_size;
 };
 
 #define NL_RX_SIZE 8192
 
-static struct nl_sock nl_scan = {.fd = -1};	/* Netlink socket for synchronous scan */
-static struct nl_sock nl_req  = {.fd = -1};	/* Netlink socket for requests */
+static struct nl_sock nl_scan = {.fd = -1};        /* Netlink socket for synchronous scan */
+static struct nl_sock nl_req  = {.fd = -1};        /* Netlink socket for requests */
 
 static void
 nl_open_sock(struct nl_sock *nl)
@@ -65,7 +65,7 @@ nl_open_sock(struct nl_sock *nl)
     {
       nl->fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
       if (nl->fd < 0)
-	die("Unable to open rtnetlink socket: %m");
+        die("Unable to open rtnetlink socket: %m");
       nl->seq = now;
       nl->rx_buffer = xmalloc(NL_RX_SIZE);
       nl->last_hdr = NULL;
@@ -114,37 +114,37 @@ nl_get_reply(struct nl_sock *nl)
   for(;;)
     {
       if (!nl->last_hdr)
-	{
-	  struct iovec iov = { nl->rx_buffer, NL_RX_SIZE };
-	  struct sockaddr_nl sa;
-	  struct msghdr m = { (struct sockaddr *) &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
-	  int x = recvmsg(nl->fd, &m, 0);
-	  if (x < 0)
-	    die("nl_get_reply: %m");
-	  if (sa.nl_pid)		/* It isn't from the kernel */
-	    {
-	      DBG("Non-kernel packet\n");
-	      continue;
-	    }
-	  nl->last_size = x;
-	  nl->last_hdr = (void *) nl->rx_buffer;
-	  if (m.msg_flags & MSG_TRUNC)
-	    bug("nl_get_reply: got truncated reply which should be impossible");
-	}
+        {
+          struct iovec iov = { nl->rx_buffer, NL_RX_SIZE };
+          struct sockaddr_nl sa;
+          struct msghdr m = { (struct sockaddr *) &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
+          int x = recvmsg(nl->fd, &m, 0);
+          if (x < 0)
+            die("nl_get_reply: %m");
+          if (sa.nl_pid)                /* It isn't from the kernel */
+            {
+              DBG("Non-kernel packet\n");
+              continue;
+            }
+          nl->last_size = x;
+          nl->last_hdr = (void *) nl->rx_buffer;
+          if (m.msg_flags & MSG_TRUNC)
+            bug("nl_get_reply: got truncated reply which should be impossible");
+        }
       if (NLMSG_OK(nl->last_hdr, nl->last_size))
-	{
-	  struct nlmsghdr *h = nl->last_hdr;
-	  nl->last_hdr = NLMSG_NEXT(h, nl->last_size);
-	  if (h->nlmsg_seq != nl->seq)
-	    {
-	      log(L_WARN "nl_get_reply: Ignoring out of sequence netlink packet (%x != %x)",
-		  h->nlmsg_seq, nl->seq);
-	      continue;
-	    }
-	  return h;
-	}
+        {
+          struct nlmsghdr *h = nl->last_hdr;
+          nl->last_hdr = NLMSG_NEXT(h, nl->last_size);
+          if (h->nlmsg_seq != nl->seq)
+            {
+              log(L_WARN "nl_get_reply: Ignoring out of sequence netlink packet (%x != %x)",
+                  h->nlmsg_seq, nl->seq);
+              continue;
+            }
+          return h;
+        }
       if (nl->last_size)
-	log(L_WARN "nl_get_reply: Found packet remnant of size %d", nl->last_size);
+        log(L_WARN "nl_get_reply: Found packet remnant of size %d", nl->last_size);
       nl->last_hdr = NULL;
     }
 }
@@ -194,14 +194,14 @@ nl_exchange(struct nlmsghdr *pkt)
     {
       h = nl_get_reply(&nl_req);
       if (h->nlmsg_type == NLMSG_ERROR)
-	break;
+        break;
       log(L_WARN "nl_exchange: Unexpected reply received");
     }
   return nl_error(h) ? -1 : 0;
 }
 
 /*
- *	Netlink attributes
+ *        Netlink attributes
  */
 
 static int nl_attr_len;
@@ -226,7 +226,7 @@ nl_parse_attrs(struct rtattr *a, struct rtattr **k, int ksize)
   while (RTA_OK(a, nl_attr_len))
     {
       if (a->rta_type < max)
-	k[a->rta_type] = a;
+        k[a->rta_type] = a;
       a = RTA_NEXT(a, nl_attr_len);
     }
   if (nl_attr_len)
@@ -240,7 +240,7 @@ nl_parse_attrs(struct rtattr *a, struct rtattr **k, int ksize)
 
 void
 nl_add_attr(struct nlmsghdr *h, unsigned bufsize, unsigned code,
-	    void *data, unsigned dlen)
+            void *data, unsigned dlen)
 {
   unsigned len = RTA_LENGTH(dlen);
   unsigned pos = NLMSG_ALIGN(h->nlmsg_len);
@@ -294,12 +294,12 @@ nl_add_multipath(struct nlmsghdr *h, unsigned bufsize, struct mpnh *nh)
   char *buf = (char *)h + pos;
   struct rtattr *rt = (void *) buf;
   buf += len;
-  
+
   for (; nh; nh = nh->next)
     {
       len += RTNH_SIZE;
       if (pos + len > bufsize)
-	bug("nl_add_multipath: packet buffer overflow");
+        bug("nl_add_multipath: packet buffer overflow");
 
       add_mpnexthop(buf, nh->gw, nh->iface->index, nh->weight);
       buf += RTNH_SIZE;
@@ -316,7 +316,7 @@ nl_parse_multipath(struct krt_proto *p, struct rtattr *ra)
 {
   /* Temporary buffer for multicast nexthops */
   static struct mpnh *nh_buffer;
-  static int nh_buf_size;	/* in number of structures */
+  static int nh_buf_size;        /* in number of structures */
   static int nh_buf_used;
 
   struct rtattr *a[RTA_CACHEINFO+1];
@@ -332,12 +332,12 @@ nl_parse_multipath(struct krt_proto *p, struct rtattr *ra)
     {
       /* Use RTNH_OK(nh,len) ?? */
       if ((len < sizeof(*nh)) || (len < nh->rtnh_len))
-	return NULL;
+        return NULL;
 
       if (nh_buf_used == nh_buf_size)
       {
-	nh_buf_size = nh_buf_size ? (nh_buf_size * 2) : 4;
-	nh_buffer = xrealloc(nh_buffer, nh_buf_size * sizeof(struct mpnh));
+        nh_buf_size = nh_buf_size ? (nh_buf_size * 2) : 4;
+        nh_buffer = xrealloc(nh_buffer, nh_buf_size * sizeof(struct mpnh));
       }
       *last = rv = nh_buffer + nh_buf_used++;
       rv->next = NULL;
@@ -346,26 +346,26 @@ nl_parse_multipath(struct krt_proto *p, struct rtattr *ra)
       rv->weight = nh->rtnh_hops;
       rv->iface = if_find_by_index(nh->rtnh_ifindex);
       if (!rv->iface)
-	return NULL;
+        return NULL;
 
       /* Nonexistent RTNH_PAYLOAD ?? */
       nl_attr_len = nh->rtnh_len - RTNH_LENGTH(0);
       nl_parse_attrs(RTNH_DATA(nh), a, sizeof(a));
       if (a[RTA_GATEWAY])
-	{
-	  if (RTA_PAYLOAD(a[RTA_GATEWAY]) != sizeof(ip_addr))
-	    return NULL;
+        {
+          if (RTA_PAYLOAD(a[RTA_GATEWAY]) != sizeof(ip_addr))
+            return NULL;
 
-	  memcpy(&rv->gw, RTA_DATA(a[RTA_GATEWAY]), sizeof(ip_addr));
-	  ipa_ntoh(rv->gw);
+          memcpy(&rv->gw, RTA_DATA(a[RTA_GATEWAY]), sizeof(ip_addr));
+          ipa_ntoh(rv->gw);
 
-	  neighbor *ng = neigh_find2(&p->p, &rv->gw, rv->iface,
-				     (nh->rtnh_flags & RTNH_F_ONLINK) ? NEF_ONLINK : 0);
-	  if (!ng || (ng->scope == SCOPE_HOST))
-	    return NULL;
-	}
+          neighbor *ng = neigh_find2(&p->p, &rv->gw, rv->iface,
+                                     (nh->rtnh_flags & RTNH_F_ONLINK) ? NEF_ONLINK : 0);
+          if (!ng || (ng->scope == SCOPE_HOST))
+            return NULL;
+        }
       else
-	return NULL;
+        return NULL;
 
       len -= NLMSG_ALIGN(nh->rtnh_len);
       nh = RTNH_NEXT(nh);
@@ -376,7 +376,7 @@ nl_parse_multipath(struct krt_proto *p, struct rtattr *ra)
 
 
 /*
- *	Scanning of interfaces
+ *        Scanning of interfaces
  */
 
 static void
@@ -408,7 +408,7 @@ nl_parse_link(struct nlmsghdr *h, int scan)
     {
       DBG("KIF: IF%d(%s) goes down\n", i->ifi_index, name);
       if (!ifi)
-	return;
+        return;
 
       if_delete(ifi);
     }
@@ -416,7 +416,7 @@ nl_parse_link(struct nlmsghdr *h, int scan)
     {
       DBG("KIF: IF%d(%s) goes up (mtu=%d,flg=%x)\n", i->ifi_index, name, mtu, i->ifi_flags);
       if (ifi && strncmp(ifi->name, name, sizeof(ifi->name)-1))
-	if_delete(ifi);
+        if_delete(ifi);
 
       strncpy(f.name, name, sizeof(f.name)-1);
       f.index = i->ifi_index;
@@ -424,25 +424,25 @@ nl_parse_link(struct nlmsghdr *h, int scan)
 
       fl = i->ifi_flags;
       if (fl & IFF_UP)
-	f.flags |= IF_ADMIN_UP;
+        f.flags |= IF_ADMIN_UP;
       if (fl & IFF_LOWER_UP)
-	f.flags |= IF_LINK_UP;
-      if (fl & IFF_LOOPBACK)		/* Loopback */
-	f.flags |= IF_MULTIACCESS | IF_LOOPBACK | IF_IGNORE;
-      else if (fl & IFF_POINTOPOINT)	/* PtP */
-	f.flags |= IF_MULTICAST;
-      else if (fl & IFF_BROADCAST)	/* Broadcast */
-	f.flags |= IF_MULTIACCESS | IF_BROADCAST | IF_MULTICAST;
+        f.flags |= IF_LINK_UP;
+      if (fl & IFF_LOOPBACK)                /* Loopback */
+        f.flags |= IF_MULTIACCESS | IF_LOOPBACK | IF_IGNORE;
+      else if (fl & IFF_POINTOPOINT)        /* PtP */
+        f.flags |= IF_MULTICAST;
+      else if (fl & IFF_BROADCAST)        /* Broadcast */
+        f.flags |= IF_MULTIACCESS | IF_BROADCAST | IF_MULTICAST;
       else
-	f.flags |= IF_MULTIACCESS;	/* NBMA */
+        f.flags |= IF_MULTIACCESS;        /* NBMA */
 
       if (fl & IFF_MULTICAST)
-	f.flags |= IF_MULTICAST;
+        f.flags |= IF_MULTICAST;
 
       ifi = if_update(&f);
 
       if (!scan)
-	if_end_partial_update(ifi);
+        if_end_partial_update(ifi);
     }
 }
 
@@ -503,12 +503,12 @@ nl_parse_addr(struct nlmsghdr *h, int scan)
 
       /* It is either a host address or a peer address */
       if (ipa_equal(ifa.ip, addr))
-	ifa.flags |= IA_HOST;
+        ifa.flags |= IA_HOST;
       else
-	{
-	  ifa.flags |= IA_PEER;
-	  ifa.opposite = addr;
-	}
+        {
+          ifa.flags |= IA_PEER;
+          ifa.opposite = addr;
+        }
     }
   else
     {
@@ -516,22 +516,22 @@ nl_parse_addr(struct nlmsghdr *h, int scan)
       ifa.prefix = ipa_and(ifa.ip, netmask);
       ifa.brd = ipa_or(ifa.ip, ipa_not(netmask));
       if (i->ifa_prefixlen == BITS_PER_IP_ADDRESS - 1)
-	ifa.opposite = ipa_opposite_m1(ifa.ip);
+        ifa.opposite = ipa_opposite_m1(ifa.ip);
 
 #ifndef IPV6
       if (i->ifa_prefixlen == BITS_PER_IP_ADDRESS - 2)
-	ifa.opposite = ipa_opposite_m2(ifa.ip);
+        ifa.opposite = ipa_opposite_m2(ifa.ip);
 
       if ((ifi->flags & IF_BROADCAST) && a[IFA_BROADCAST])
-	{
-	  ip_addr xbrd;
-	  memcpy(&xbrd, RTA_DATA(a[IFA_BROADCAST]), sizeof(xbrd));
-	  ipa_ntoh(xbrd);
-	  if (ipa_equal(xbrd, ifa.prefix) || ipa_equal(xbrd, ifa.brd))
-	    ifa.brd = xbrd;
-	  else if (ifi->flags & IF_TMP_DOWN) /* Complain only during the first scan */
-	    log(L_ERR "KIF: Invalid broadcast address %I for %s", xbrd, ifi->name);
-	}
+        {
+          ip_addr xbrd;
+          memcpy(&xbrd, RTA_DATA(a[IFA_BROADCAST]), sizeof(xbrd));
+          ipa_ntoh(xbrd);
+          if (ipa_equal(xbrd, ifa.prefix) || ipa_equal(xbrd, ifa.brd))
+            ifa.brd = xbrd;
+          else if (ifi->flags & IF_TMP_DOWN) /* Complain only during the first scan */
+            log(L_ERR "KIF: Invalid broadcast address %I for %s", xbrd, ifi->name);
+        }
 #endif
     }
 
@@ -582,7 +582,7 @@ kif_do_scan(struct kif_proto *p UNUSED)
 }
 
 /*
- *	Routes
+ *        Routes
  */
 
 static struct krt_proto *nl_table_map[NL_NUM_TABLES];
@@ -600,7 +600,7 @@ krt_capable(rte *e)
     case RTD_ROUTER:
     case RTD_DEVICE:
       if (a->iface == NULL)
-	return 0;
+        return 0;
     case RTD_BLACKHOLE:
     case RTD_UNREACHABLE:
     case RTD_PROHIBIT:
@@ -762,7 +762,7 @@ nl_parse_route(struct nlmsghdr *h, int scan)
   if (a[RTA_OIF])
     memcpy(&oif, RTA_DATA(a[RTA_OIF]), sizeof(oif));
 
-  p = nl_table_map[i->rtm_table];	/* Do we know this table? */
+  p = nl_table_map[i->rtm_table];        /* Do we know this table? */
   DBG("KRT: Got %I/%d, type=%d, oif=%d, table=%d, prid=%d, proto=%s\n", dst, i->rtm_dst_len, i->rtm_type, oif, i->rtm_table, i->rtm_protocol, p ? p->p.name : "(none)");
   if (!p)
     SKIP("unknown table %d\n", i->rtm_table);
@@ -772,7 +772,7 @@ nl_parse_route(struct nlmsghdr *h, int scan)
   if (a[RTA_IIF])
     SKIP("IIF set\n");
 #else
-  if (i->rtm_tos != 0)			/* We don't support TOS */
+  if (i->rtm_tos != 0)                        /* We don't support TOS */
     SKIP("TOS %02x\n", i->rtm_tos);
 #endif
 
@@ -802,7 +802,7 @@ nl_parse_route(struct nlmsghdr *h, int scan)
 
     case RTPROT_BIRD:
       if (!scan)
-	SKIP("echo\n");
+        SKIP("echo\n");
       src = KRT_SRC_BIRD;
       break;
 
@@ -825,53 +825,53 @@ nl_parse_route(struct nlmsghdr *h, int scan)
     case RTN_UNICAST:
 
       if (a[RTA_MULTIPATH])
-	{
-	  ra.dest = RTD_MULTIPATH;
-	  ra.nexthops = nl_parse_multipath(p, a[RTA_MULTIPATH]);
-	  if (!ra.nexthops)
-	    {
-	      log(L_ERR "KRT: Received strange multipath route %I/%d",
-		  net->n.prefix, net->n.pxlen);
-	      return;
-	    }
-	    
-	  break;
-	}
+        {
+          ra.dest = RTD_MULTIPATH;
+          ra.nexthops = nl_parse_multipath(p, a[RTA_MULTIPATH]);
+          if (!ra.nexthops)
+            {
+              log(L_ERR "KRT: Received strange multipath route %I/%d",
+                  net->n.prefix, net->n.pxlen);
+              return;
+            }
+
+          break;
+        }
 
       ra.iface = if_find_by_index(oif);
       if (!ra.iface)
-	{
-	  log(L_ERR "KRT: Received route %I/%d with unknown ifindex %u",
-	      net->n.prefix, net->n.pxlen, oif);
-	  return;
-	}
+        {
+          log(L_ERR "KRT: Received route %I/%d with unknown ifindex %u",
+              net->n.prefix, net->n.pxlen, oif);
+          return;
+        }
 
       if (a[RTA_GATEWAY])
-	{
-	  neighbor *ng;
-	  ra.dest = RTD_ROUTER;
-	  memcpy(&ra.gw, RTA_DATA(a[RTA_GATEWAY]), sizeof(ra.gw));
-	  ipa_ntoh(ra.gw);
+        {
+          neighbor *ng;
+          ra.dest = RTD_ROUTER;
+          memcpy(&ra.gw, RTA_DATA(a[RTA_GATEWAY]), sizeof(ra.gw));
+          ipa_ntoh(ra.gw);
 
 #ifdef IPV6
-	  /* Silently skip strange 6to4 routes */
-	  if (ipa_in_net(ra.gw, IPA_NONE, 96))
-	    return;
+          /* Silently skip strange 6to4 routes */
+          if (ipa_in_net(ra.gw, IPA_NONE, 96))
+            return;
 #endif
 
-	  ng = neigh_find2(&p->p, &ra.gw, ra.iface,
-			   (i->rtm_flags & RTNH_F_ONLINK) ? NEF_ONLINK : 0);
-	  if (!ng || (ng->scope == SCOPE_HOST))
-	    {
-	      log(L_ERR "KRT: Received route %I/%d with strange next-hop %I",
-		  net->n.prefix, net->n.pxlen, ra.gw);
-	      return;
-	    }
-	}
+          ng = neigh_find2(&p->p, &ra.gw, ra.iface,
+                           (i->rtm_flags & RTNH_F_ONLINK) ? NEF_ONLINK : 0);
+          if (!ng || (ng->scope == SCOPE_HOST))
+            {
+              log(L_ERR "KRT: Received route %I/%d with strange next-hop %I",
+                  net->n.prefix, net->n.pxlen, ra.gw);
+              return;
+            }
+        }
       else
-	{
-	  ra.dest = RTD_DEVICE;
-	}
+        {
+          ra.dest = RTD_DEVICE;
+        }
 
       break;
     case RTN_BLACKHOLE:
@@ -896,7 +896,7 @@ nl_parse_route(struct nlmsghdr *h, int scan)
   e->u.krt.type = i->rtm_type;
 
   if (a[RTA_PRIORITY])
-    memcpy(&e->u.krt.metric, RTA_DATA(a[RTA_PRIORITY]), sizeof(e->u.krt.metric)); 
+    memcpy(&e->u.krt.metric, RTA_DATA(a[RTA_PRIORITY]), sizeof(e->u.krt.metric));
   else
     e->u.krt.metric = 0;
 
@@ -939,7 +939,7 @@ nl_parse_route(struct nlmsghdr *h, int scan)
 }
 
 void
-krt_do_scan(struct krt_proto *p UNUSED)	/* CONFIG_ALL_TABLES_AT_ONCE => p is NULL */
+krt_do_scan(struct krt_proto *p UNUSED)        /* CONFIG_ALL_TABLES_AT_ONCE => p is NULL */
 {
   struct nlmsghdr *h;
 
@@ -952,11 +952,11 @@ krt_do_scan(struct krt_proto *p UNUSED)	/* CONFIG_ALL_TABLES_AT_ONCE => p is NUL
 }
 
 /*
- *	Asynchronous Netlink interface
+ *        Asynchronous Netlink interface
  */
 
-static sock *nl_async_sk;		/* BIRD socket for asynchronous notifications */
-static byte *nl_async_rx_buffer;	/* Receive buffer */
+static sock *nl_async_sk;                /* BIRD socket for asynchronous notifications */
+static byte *nl_async_rx_buffer;        /* Receive buffer */
 
 static void
 nl_async_msg(struct nlmsghdr *h)
@@ -997,19 +997,19 @@ nl_async_hook(sock *sk, int size UNUSED)
   if (x < 0)
     {
       if (errno == ENOBUFS)
-	{
-	  /*
-	   *  Netlink reports some packets have been thrown away.
-	   *  One day we might react to it by asking for route table
-	   *  scan in near future.
-	   */
-	  return 1;	/* More data are likely to be ready */
-	}
+        {
+          /*
+           *  Netlink reports some packets have been thrown away.
+           *  One day we might react to it by asking for route table
+           *  scan in near future.
+           */
+          return 1;        /* More data are likely to be ready */
+        }
       else if (errno != EWOULDBLOCK)
-	log(L_ERR "Netlink recvmsg: %m");
+        log(L_ERR "Netlink recvmsg: %m");
       return 0;
     }
-  if (sa.nl_pid)		/* It isn't from the kernel */
+  if (sa.nl_pid)                /* It isn't from the kernel */
     {
       DBG("Non-kernel packet\n");
       return 1;
@@ -1075,7 +1075,7 @@ nl_open_async(void)
 }
 
 /*
- *	Interface to the UNIX krt module
+ *        Interface to the UNIX krt module
  */
 
 static u8 nl_cf_table[(NL_NUM_TABLES+7) / 8];
