@@ -8,8 +8,10 @@ struct wiface {
   unsigned long mtu;
   unsigned long index;			/* OS-dependent interface index */
   unsigned oper_status;
-  //list addrs;				/* Addresses assigned to this interface */
-  //struct wifa *addr;			/* Primary address */
+  unsigned long ipv4_addr;
+  unsigned prefix;
+  unsigned long prefix_len;
+  int is_loopback;
 };
 
 #endif

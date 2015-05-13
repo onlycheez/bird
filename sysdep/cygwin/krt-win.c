@@ -30,58 +30,129 @@ kif_sys_shutdown(struct kif_proto *p)
 
 static struct iface* wstruct_convert_iface(struct wiface *wif)
 {
-  struct iface *f = xmalloc(sizeof(struct iface));
-  memset(f, 0, sizeof(struct iface));
-  memset(f->name, 0, sizeof(f->name));
+  struct iface *iface = xmalloc(sizeof(struct iface));
+  bzero(iface, sizeof(struct iface));
+  bzero(iface->name, sizeof(iface->name));
 
-  memcpy(f->name, wif->name, strlen(wif->name));
-  f->index = (unsigned)wif->index;
-  f->mtu = (unsigned)wif->mtu;
-
+  memcpy(iface->name, wif->name, strlen(wif->name));
+  iface->index = (unsigned)wif->index;
+  iface->mtu = (unsigned)wif->mtu;
 
   // TODO: Setting flags.
+
+  iface->flags |= (IF_MULTIACCESS | IF_MULTICAST);
+
+  if (wif->is_loopback)
+  {
+    iface->flags |= (IF_MULTIACCESS | IF_LOOPBACK | IF_IGNORE);
+  }
+
   if (!(wif->flags & 0x10))
   {
-    f->flags |= IF_MULTICAST;
+    iface->flags |= IF_MULTICAST;
   }
 
   if (wif->oper_status == 1)
   {
-    f->flags |= IF_UP;
-    f->flags |= IF_ADMIN_UP;
+    iface->flags |= IF_UP;
+    iface->flags |= IF_ADMIN_UP;
+    iface->flags |= IF_LINK_UP;
   }
   else if (wif->oper_status == 7)
   {
   }
 
-  return f;
+  init_list(&iface->addrs);
+  init_list(&iface->neighbors);
+
+  return iface;
+}
+
+static struct ifa* wstruct_convert_ifa(struct wiface *wif, struct iface *iface)
+{
+  struct ifa *ifa = xmalloc(sizeof(ifa));
+  bzero(ifa, sizeof(struct ifa));
+  ifa->iface = if_find_by_index(iface->index);
+  if (!ifa->iface)
+  {
+    printf("Received address message for unknown interface %d",
+      iface->index);
+  }
+
+  ifa->ip = (ip_addr)wif->ipv4_addr;
+  ipa_ntoh(ifa->ip);
+
+  ifa->pxlen = wif->prefix_len;
+  ip_addr prefix = wif->prefix;
+  ipa_ntoh(prefix);
+  ifa->prefix = ifa->brd = prefix;
+
+  /* It is either a host address or a peer address */
+  if (ipa_equal(ifa->ip, prefix))
+    ifa->flags |= IA_HOST;
+  else
+  {
+    ifa->flags |= IA_PEER;
+    ifa->opposite = prefix;
+  }
+
+  int scope = ipa_classify(ifa->ip);
+  if (scope < 0)
+  {
+    printf("Invalid interface address for %s\n", iface->name);
+    return NULL;
+  }
+  ifa->scope = scope & IADDR_SCOPE_MASK;
+
+  return ifa;
 }
 
 void
 kif_do_scan(struct kif_proto *p UNUSED)
 {
-  struct wiface *wif;
-  struct iface *f;
+  struct wiface *wiface;
+  struct iface *iface;
+  struct ifa *ifa;
+
+  if (win_if_update_in_progess())
+  {
+    return;
+  }
 
   if_start_update();
 
 #ifdef IPV6
-  win_if_scan(6);
+  win_if_scan(6)
 #else
   win_if_scan(4);
 #endif
 
-  while (wif = win_if_next())
+  while (wiface = win_if_next())
   {
-    printf("wif index: %lu\n", wif->index);
-    printf("wif name: %s\n", wif->name);
-    printf("wif mtu: %lu\n", wif->mtu);
+    printf("wif name: %s\n", wiface->name);
+    printf("wif mtu: %lu\n", wiface->mtu);
+    printf("wif status: %lu\n", wiface->oper_status);
+    printf("wif addr: %lu\n", wiface->ipv4_addr);
 
-    f = wstruct_convert_iface(wif);
-    free(wif->name);
-    free(wif);
+    iface = wstruct_convert_iface(wiface);
 
-    if_update(f);
+    printf("iface 1: %s\n", ((iface->flags & IF_UP) ? "UP" : "DOWN"));
+
+    if_update(iface);
+    if_end_partial_update(iface);
+    printf("iface 2: %s\n", ((iface->flags & IF_UP) ? "UP" : "DOWN"));
+    ifa = wstruct_convert_ifa(wiface, iface);
+    free(wiface->name);
+    free(wiface);
+    if (!ifa)
+    {
+      continue;
+    }
+
+    ifa_update(ifa);
+    if_end_partial_update(iface);
+    printf("iface 3: %s\n", ((iface->flags & IF_UP) ? "UP" : "DOWN"));
+
     // TODO: Delete removed interfaces
   }
 

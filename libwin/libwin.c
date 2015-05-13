@@ -20,15 +20,15 @@ LPVOID wmalloc(ULONG size)
   die("Unable to allocate %d bytes of memory", size);
 }
 
+int win_if_update_in_progess(void)
+{
+  printf("win_if_scan in progress\n");
+  return !!addresses;
+}
+
 void win_if_scan(int ipv)
 {
   printf("win_if_scan called\n");
-  if (addresses)
-  {
-    printf("win_if_scan in progress\n");
-    /* Scan is in progress. To get next interface call win_if_next. */
-    return;
-  }
 
   ULONG size = 15000;
   DWORD retval = ERROR_SUCCESS;
@@ -44,8 +44,6 @@ void win_if_scan(int ipv)
     NULL,
     addresses,
     &size);
-
-  printf("retval success %d\n", retval == ERROR_SUCCESS);
 
   cur_addr = addresses;
 }
@@ -70,14 +68,27 @@ struct wiface* win_if_next(void)
   wif->mtu = cur_addr->Mtu;
   wif->flags = cur_addr->Flags;
   wif->oper_status = cur_addr->OperStatus;
+  wif->is_loopback = (cur_addr->IfType == IF_TYPE_SOFTWARE_LOOPBACK);
 
-  IP_ADAPTER_ADDRESSES *address = cur_addr->FirstUnicastAddress;
-  while (address)
+  IP_ADAPTER_UNICAST_ADDRESS *address = cur_addr->FirstUnicastAddress;
+  if (address)
   {
-
+    SOCKADDR *sockaddr = address->Address.lpSockaddr;
+#ifdef IPV6
+#else
+    printf("address: %s\n", inet_ntoa(((struct sockaddr_in *)sockaddr)->sin_addr));
+    wif->ipv4_addr = ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
+#endif
+    //address = address->Next;
   }
 
-  cur_addr
+  IP_ADAPTER_PREFIX *prefix = cur_addr->FirstPrefix;
+  if (prefix)
+  {
+    SOCKADDR *sockaddr = prefix->Address.lpSockaddr;
+    wif->prefix = ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
+    wif->prefix_len = prefix->PrefixLength;
+  }
 
   cur_addr = cur_addr->Next;
 
