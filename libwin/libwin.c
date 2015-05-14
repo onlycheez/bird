@@ -7,6 +7,9 @@
 
 #include "wstructs.h"
 
+/* GUID length + 2 for parenthesis */
+#define GUID_LENGTH 39
+
 static IP_ADAPTER_ADDRESSES *addresses;
 static IP_ADAPTER_ADDRESSES *cur_addr;
 
@@ -18,6 +21,14 @@ LPVOID wmalloc(ULONG size)
   if (p)
     return p;
   die("Unable to allocate %d bytes of memory", size);
+}
+
+PSTR narrow_wstr(PCWSTR wstr)
+{
+  int length = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
+  PSTR str = (PSTR)wmalloc(length);
+  WideCharToMultiByte(CP_UTF8, 0, wstr, -1, str, length, NULL, NULL);
+  return str;
 }
 
 int win_if_update_in_progess(void)
@@ -63,7 +74,13 @@ struct wiface* win_if_next(void)
 
   struct wiface *wif = wmalloc(sizeof(struct wiface));
 
-  wif->name = strdup(cur_addr->AdapterName);
+  PSTR friendly_name = narrow_wstr(cur_addr->FriendlyName);
+
+  int name_len = strlen((const char *)friendly_name) + 2 + GUID_LENGTH;
+  wif->name = wmalloc(name_len + 1);
+  wif->name[name_len] = '\0';
+  snprintf(wif->name, name_len, "%s, %s", friendly_name, cur_addr->AdapterName);
+
   wif->index = cur_addr->IfIndex;
   wif->mtu = cur_addr->Mtu;
   wif->flags = cur_addr->Flags;
@@ -91,6 +108,9 @@ struct wiface* win_if_next(void)
   }
 
   cur_addr = cur_addr->Next;
+
+  // TODO: free
+  //free(friendly_name);
 
   return wif;
 }
