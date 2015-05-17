@@ -2,6 +2,11 @@
 #ifndef _WINDOWS_STRUCT_H_
 #define _WINDOWS_STRUCT_H_
 
+struct wifa {
+  unsigned long addr;
+  unsigned long pxlen;
+};
+
 struct wiface {
   char *name;
   unsigned flags;
@@ -9,8 +14,8 @@ struct wiface {
   unsigned long index;			/* OS-dependent interface index */
   unsigned oper_status;
   unsigned long ipv4_addr;
-  unsigned prefix;
-  unsigned long prefix_len;
+  struct wifa **uni_addrs;
+  unsigned long pxlen;
   int is_loopback;
 };
 

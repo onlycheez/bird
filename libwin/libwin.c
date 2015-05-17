@@ -23,6 +23,14 @@ LPVOID wmalloc(ULONG size)
   die("Unable to allocate %d bytes of memory", size);
 }
 
+LPVOID wrealloc(void *ptr, ULONG size)
+{
+  void *p = realloc(ptr, size);
+  if (p)
+    return p;
+  die("Unable to allocate %d bytes of memory", size);
+}
+
 PSTR narrow_wstr(PCWSTR wstr)
 {
   int length = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
@@ -74,37 +82,38 @@ struct wiface* win_if_next(void)
 
   struct wiface *wif = wmalloc(sizeof(struct wiface));
 
-  PSTR friendly_name = narrow_wstr(cur_addr->FriendlyName);
+  //PSTR friendly_name = narrow_wstr(cur_addr->FriendlyName);
+  //
+  //int name_len = strlen((const char *)friendly_name) + 2 + GUID_LENGTH;
+  //wif->name = wmalloc(name_len + 1);
+  //wif->name[name_len] = '\0';
+  //snprintf(wif->name, name_len, "%s, %s", friendly_name, cur_addr->AdapterName);
 
-  int name_len = strlen((const char *)friendly_name) + 2 + GUID_LENGTH;
-  wif->name = wmalloc(name_len + 1);
-  wif->name[name_len] = '\0';
-  snprintf(wif->name, name_len, "%s, %s", friendly_name, cur_addr->AdapterName);
-
+  wif->name = strdup(cur_addr->AdapterName);
   wif->index = cur_addr->IfIndex;
   wif->mtu = cur_addr->Mtu;
   wif->flags = cur_addr->Flags;
   wif->oper_status = cur_addr->OperStatus;
   wif->is_loopback = (cur_addr->IfType == IF_TYPE_SOFTWARE_LOOPBACK);
 
-  IP_ADAPTER_UNICAST_ADDRESS *address = cur_addr->FirstUnicastAddress;
-  if (address)
+  int addrs_cnt = 0;
+  wif->uni_addrs = NULL;
+  IP_ADAPTER_UNICAST_ADDRESS_LH *address =
+    (IP_ADAPTER_UNICAST_ADDRESS_LH *)cur_addr->FirstUnicastAddress;
+  while (address)
   {
+    addrs_cnt += 1;
     SOCKADDR *sockaddr = address->Address.lpSockaddr;
+    wif->uni_addrs = wrealloc(wif->uni_addrs, (addrs_cnt + 1) * sizeof(struct wifa *));
+    wif->uni_addrs[addrs_cnt] = NULL;
+    wif->uni_addrs[addrs_cnt - 1] = wmalloc(sizeof(struct wifa));
 #ifdef IPV6
 #else
-    printf("address: %s\n", inet_ntoa(((struct sockaddr_in *)sockaddr)->sin_addr));
-    wif->ipv4_addr = ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
+    wif->uni_addrs[addrs_cnt - 1]->addr =
+      ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
+    wif->uni_addrs[addrs_cnt - 1]->pxlen = address->OnLinkPrefixLength;
 #endif
-    //address = address->Next;
-  }
-
-  IP_ADAPTER_PREFIX *prefix = cur_addr->FirstPrefix;
-  if (prefix)
-  {
-    SOCKADDR *sockaddr = prefix->Address.lpSockaddr;
-    wif->prefix = ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
-    wif->prefix_len = prefix->PrefixLength;
+    address = address->Next;
   }
 
   cur_addr = cur_addr->Next;

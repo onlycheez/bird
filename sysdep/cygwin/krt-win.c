@@ -28,6 +28,18 @@ kif_sys_shutdown(struct kif_proto *p)
 
 }
 
+void wstruct_free(struct wiface *wiface)
+{
+  int i;
+  for (i = 0; wiface->uni_addrs[i]; i++)
+  {
+    free(wiface->uni_addrs[i]);
+  }
+
+  free(wiface->name);
+  free(wiface);
+}
+
 static struct iface* wstruct_convert_iface(struct wiface *wif)
 {
   struct iface *iface = xmalloc(sizeof(struct iface));
@@ -68,32 +80,65 @@ static struct iface* wstruct_convert_iface(struct wiface *wif)
   return iface;
 }
 
-static struct ifa* wstruct_convert_ifa(struct wiface *wif, struct iface *iface)
+static struct ifa* wstruct_convert_ifa(struct wifa *wifa, struct iface *iface)
 {
   struct ifa *ifa = xmalloc(sizeof(ifa));
   bzero(ifa, sizeof(struct ifa));
   ifa->iface = if_find_by_index(iface->index);
   if (!ifa->iface)
   {
-    printf("Received address message for unknown interface %d",
+    printf("Received address message for unknown interface %d\n",
       iface->index);
   }
 
-  ifa->ip = (ip_addr)wif->ipv4_addr;
+  if (wifa->pxlen > BITS_PER_IP_ADDRESS)
+  {
+    printf("KIF: Invalid prefix length for interface %s: %d\n",
+      iface->name, wifa->pxlen);
+    return NULL;
+  }
+
+  ifa->ip = (ip_addr)wifa->addr;
   ipa_ntoh(ifa->ip);
 
-  ifa->pxlen = wif->prefix_len;
-  ip_addr prefix = wif->prefix;
-  ipa_ntoh(prefix);
-  ifa->prefix = ifa->brd = prefix;
+  if (wifa->pxlen == BITS_PER_IP_ADDRESS)
+  {
+    ip_addr addr = (ip_addr)wifa->addr;
+    ipa_ntoh(addr);
+    ifa->prefix = ifa->brd = addr;
 
-  /* It is either a host address or a peer address */
-  if (ipa_equal(ifa->ip, prefix))
-    ifa->flags |= IA_HOST;
+    /* It is either a host address or a peer address */
+    if (ipa_equal(ifa->ip, addr))
+      ifa->flags |= IA_HOST;
+    else
+    {
+      ifa->flags |= IA_PEER;
+      ifa->opposite = addr;
+    }
+  }
   else
   {
-    ifa->flags |= IA_PEER;
-    ifa->opposite = prefix;
+    ip_addr netmask = ipa_mkmask(ifa->pxlen);
+    ifa->prefix = ipa_and(ifa->ip, netmask);
+    ifa->brd = ipa_or(ifa->ip, ipa_not(netmask));
+    if (wifa->pxlen == BITS_PER_IP_ADDRESS - 1)
+      ifa->opposite = ipa_opposite_m1(ifa->ip);
+
+//#ifndef IPV6
+//    if (wif->pxlen == BITS_PER_IP_ADDRESS - 2)
+//      ifa->opposite = ipa_opposite_m2(ifa->ip);
+//
+//    if ((iface->flags & IF_BROADCAST) && a[IFA_BROADCAST])
+//      {
+//        ip_addr xbrd;
+//        memcpy(&xbrd, RTA_DATA(a[IFA_BROADCAST]), sizeof(xbrd));
+//        ipa_ntoh(xbrd);
+//        if (ipa_equal(xbrd, ifa.prefix) || ipa_equal(xbrd, ifa.brd))
+//          ifa.brd = xbrd;
+//        else if (ifi->flags & IF_TMP_DOWN) /* Complain only during the first scan */
+//          log(L_ERR "KIF: Invalid broadcast address %I for %s", xbrd, ifi->name);
+//      }
+//#endif
   }
 
   int scope = ipa_classify(ifa->ip);
@@ -113,6 +158,7 @@ kif_do_scan(struct kif_proto *p UNUSED)
   struct wiface *wiface;
   struct iface *iface;
   struct ifa *ifa;
+  int i;
 
   if (win_if_update_in_progess())
   {
@@ -132,7 +178,6 @@ kif_do_scan(struct kif_proto *p UNUSED)
     printf("wif name: %s\n", wiface->name);
     printf("wif mtu: %lu\n", wiface->mtu);
     printf("wif status: %lu\n", wiface->oper_status);
-    printf("wif addr: %lu\n", wiface->ipv4_addr);
 
     iface = wstruct_convert_iface(wiface);
 
@@ -141,14 +186,13 @@ kif_do_scan(struct kif_proto *p UNUSED)
     if_update(iface);
     if_end_partial_update(iface);
     printf("iface 2: %s\n", ((iface->flags & IF_UP) ? "UP" : "DOWN"));
-    ifa = wstruct_convert_ifa(wiface, iface);
-    free(wiface->name);
-    free(wiface);
+    ifa = wstruct_convert_ifa(wiface->uni_addrs[0], iface);
     if (!ifa)
     {
       continue;
     }
 
+    wstruct_free(wiface);
     ifa_update(ifa);
     if_end_partial_update(iface);
     printf("iface 3: %s\n", ((iface->flags & IF_UP) ? "UP" : "DOWN"));
