@@ -10,9 +10,6 @@
 /* GUID length + 2 for parenthesis */
 #define GUID_LENGTH 39
 
-static IP_ADAPTER_ADDRESSES *addresses;
-static IP_ADAPTER_ADDRESSES *cur_addr;
-
 void die(const char *msg, ...) __attribute__((noreturn));
 
 LPVOID wmalloc(ULONG size)
@@ -39,13 +36,51 @@ PSTR narrow_wstr(PCWSTR wstr)
   return str;
 }
 
-int win_if_update_in_progess(void)
+int addr_list_length(IP_ADAPTER_UNICAST_ADDRESS_LH *address)
 {
-  printf("win_if_scan in progress\n");
-  return !!addresses;
+  IP_ADAPTER_UNICAST_ADDRESS_LH *addr = address;
+  int count = 0;
+
+  while (addr)
+  {
+    count += 1;
+    addr = (IP_ADAPTER_UNICAST_ADDRESS_LH *)addr->Next;
+  }
+
+  return count;
 }
 
-void win_if_scan(int ipv)
+int addrs_count(IP_ADAPTER_ADDRESSES *adapter)
+{
+  int count = 0;
+
+  count += addr_list_length(
+    (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstUnicastAddress);
+  //count += addr_list_length(
+  //  (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstMulticastAddress);
+  //count += addr_list_length(
+  //  (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstAnycastAddress);
+
+  return count;
+}
+
+void get_addrs(IP_ADAPTER_UNICAST_ADDRESS_LH *address, struct wiface *wiface,
+  int *idx)
+{
+  IP_ADAPTER_UNICAST_ADDRESS_LH *addr = address;
+
+  while (addr)
+  {
+    SOCKADDR *sockaddr = addr->Address.lpSockaddr;
+    wiface->addrs[*idx].addr =
+      ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
+    wiface->addrs[*idx].pxlen = addr->OnLinkPrefixLength;
+    addr = addr->Next;
+    *idx += 1;
+  }
+}
+
+struct wiface* win_if_scan(int ipv, int *cnt)
 {
   printf("win_if_scan called\n");
 
@@ -53,73 +88,81 @@ void win_if_scan(int ipv)
   DWORD retval = ERROR_SUCCESS;
   ULONG family = AF_INET;
   if (ipv == 6)
-    ipv = AF_INET6;
+    family = AF_INET6;
 
-  addresses = wmalloc(size);
+  IP_ADAPTER_ADDRESSES *adapter, *adapters;
+  struct wiface *wifaces;
+  int i, adapt_cnt, addr_idx;
+
+  adapters = wmalloc(size);
 
   retval = GetAdaptersAddresses(AF_INET,
     GAA_FLAG_INCLUDE_PREFIX |
     GAA_FLAG_SKIP_DNS_SERVER,
     NULL,
-    addresses,
+    adapters,
     &size);
 
-  cur_addr = addresses;
-}
-
-struct wiface* win_if_next(void)
-{
-  if (!cur_addr)
+  adapter = adapters;
+  adapt_cnt = 0;
+  while (adapter)
   {
-    if (addresses)
+    adapt_cnt += 1;
+    adapter = adapter->Next;
+  }
+
+  wifaces = wmalloc(adapt_cnt * sizeof(struct wiface));
+  adapter = adapters;
+  i = 0;
+  while (adapter)
+  {
+    wifaces[i].flags = 0;
+    wifaces[i].name = strdup(adapter->AdapterName);
+    wifaces[i].index = adapter->IfIndex;
+    wifaces[i].mtu = adapter->Mtu;
+    wifaces[i].up = adapter->OperStatus;
+    if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
     {
-      free(addresses);
-      addresses = NULL;
+      wifaces[i].flags |= W_IF_LOOPBACK;
+      wifaces[i].flags |= W_IF_LOOPBACK;
     }
 
-    return NULL;
+
+    wifaces[i].addrs_cnt = addrs_count(adapter);
+    wifaces[i].addrs = wmalloc(wifaces[i].addrs_cnt * sizeof(struct wifa));
+
+    addr_idx = 0;
+
+    if (adapter->FirstUnicastAddress)
+    {
+      get_addrs(
+        (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstUnicastAddress,
+        &wifaces[i], &addr_idx);
+      wifaces[i].flags |= W_IF_MULTICAST;
+    }
+
+    //if (adapter->FirstMulticastAddress)
+    //{
+    //  get_addrs(
+    //    (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstMulticastAddress,
+    //    &wifaces[i], &addr_idx);
+    //  wifaces[i].flags |= W_IF_MULTICAST;
+    //}
+    //
+    //if (adapter->FirstAnycastAddress)
+    //{
+    //  get_addrs(
+    //    (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstAnycastAddress,
+    //    &wifaces[i], &addr_idx);
+    //  wifaces[i].flags |= W_IF_MULTICAST;
+    //}
+
+    i += 1;
+    adapter = adapter->Next;
   }
 
-  struct wiface *wif = wmalloc(sizeof(struct wiface));
+  *cnt = adapt_cnt;
+  free(adapters);
 
-  //PSTR friendly_name = narrow_wstr(cur_addr->FriendlyName);
-  //
-  //int name_len = strlen((const char *)friendly_name) + 2 + GUID_LENGTH;
-  //wif->name = wmalloc(name_len + 1);
-  //wif->name[name_len] = '\0';
-  //snprintf(wif->name, name_len, "%s, %s", friendly_name, cur_addr->AdapterName);
-
-  wif->name = strdup(cur_addr->AdapterName);
-  wif->index = cur_addr->IfIndex;
-  wif->mtu = cur_addr->Mtu;
-  wif->flags = cur_addr->Flags;
-  wif->oper_status = cur_addr->OperStatus;
-  wif->is_loopback = (cur_addr->IfType == IF_TYPE_SOFTWARE_LOOPBACK);
-
-  int addrs_cnt = 0;
-  wif->uni_addrs = NULL;
-  IP_ADAPTER_UNICAST_ADDRESS_LH *address =
-    (IP_ADAPTER_UNICAST_ADDRESS_LH *)cur_addr->FirstUnicastAddress;
-  while (address)
-  {
-    addrs_cnt += 1;
-    SOCKADDR *sockaddr = address->Address.lpSockaddr;
-    wif->uni_addrs = wrealloc(wif->uni_addrs, (addrs_cnt + 1) * sizeof(struct wifa *));
-    wif->uni_addrs[addrs_cnt] = NULL;
-    wif->uni_addrs[addrs_cnt - 1] = wmalloc(sizeof(struct wifa));
-#ifdef IPV6
-#else
-    wif->uni_addrs[addrs_cnt - 1]->addr =
-      ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
-    wif->uni_addrs[addrs_cnt - 1]->pxlen = address->OnLinkPrefixLength;
-#endif
-    address = address->Next;
-  }
-
-  cur_addr = cur_addr->Next;
-
-  // TODO: free
-  //free(friendly_name);
-
-  return wif;
+  return wifaces;
 }
