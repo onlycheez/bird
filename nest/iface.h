@@ -37,6 +37,9 @@ struct iface {
   list addrs;				/* Addresses assigned to this interface */
   struct ifa *addr;			/* Primary address */
   list neighbors;			/* All neighbors on this interface */
+#ifdef BIRD_CYGWIN
+  unsigned long w_luid;  /* Interface identifier on Windows */
+#endif
 };
 
 #define IF_UP 1				/* IF_ADMIN_UP and IP address known */
@@ -99,6 +102,9 @@ void if_feed_baby(struct proto *);
 struct iface *if_find_by_index(unsigned);
 struct iface *if_find_by_name(char *);
 struct iface *if_get_by_name(char *);
+#ifdef BIRD_CYGWIN
+struct iface *if_find_by_luid(unsigned long luid);
+#endif
 void ifa_recalc_all_primary_addresses(void);
 
 

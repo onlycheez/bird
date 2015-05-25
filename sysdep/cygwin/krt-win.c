@@ -42,6 +42,7 @@ static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
   memcpy(iface->name, wif.name, strlen(wif.name));
   iface->index = (unsigned)wif.index;
   iface->mtu = (unsigned)wif.mtu;
+  iface->w_luid = wif.luid;
 
   // TODO: Setting flags.
 
@@ -127,7 +128,7 @@ static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
   if (scope < 0)
   {
     printf("Invalid interface address for %s\n", iface->name);
-    return NULL;
+    return;
   }
   ifa->scope = scope & IADDR_SCOPE_MASK;
 }
@@ -148,17 +149,10 @@ kif_do_scan(struct kif_proto *p UNUSED)
 
   for (i = 0; i < cnt; i++)
   {
-    printf("wif name: %s\n", wifaces[i].name);
-    printf("wif mtu: %lu\n", wifaces[i].mtu);
-    printf("wif up: %lu\n", wifaces[i].up);
-
     wstruct_fill_iface(wifaces[i], &iface);
-
-    printf("iface 1: %s\n", ((iface.flags & IF_UP) ? "UP" : "DOWN"));
 
     if_update(&iface);
     if_end_partial_update(&iface);
-    printf("iface 2: %s\n", ((iface.flags & IF_UP) ? "UP" : "DOWN"));
 
     for (j = 0; j < wifaces[i].addrs_cnt; j++)
     {
@@ -167,7 +161,6 @@ kif_do_scan(struct kif_proto *p UNUSED)
     }
 
     if_end_partial_update(&iface);
-    printf("iface 3: %s\n", ((iface.flags & IF_UP) ? "UP" : "DOWN"));
 
     // TODO: Delete removed interfaces
     free(wifaces[i].name);
@@ -189,9 +182,94 @@ krt_sys_shutdown(struct krt_proto *p UNUSED)
 
 }
 
-void
-krt_do_scan(struct krt_proto *p UNUSED)	/* CONFIG_ALL_TABLES_AT_ONCE => p is NULL */
+static void wstruct_fill_rta(rta *ra, struct krt_proto *p, struct wrtentry *entry)
 {
+  // TODO: Check whether Windows distinguishes route/device and supports multipath.
+  ra->iface = if_find_by_luid(entry->luid);
+  if (!ra->iface)
+  {
+    printf("wstruct_fill_rta: iface with luid %lu not found.\n");
+    return;
+  }
+
+  if (entry->next_hop != 0)
+  {
+    ra->dest = RTD_ROUTER;
+    ra->gw = entry->next_hop;
+    ipa_ntoh(ra->gw);
+
+    // TODO: Last parameter should be some real length.
+    net *net = net_get(p->p.table, ra->dest, 0);
+
+    neighbor *ng = neigh_find2(&p->p, &ra->gw, ra->iface, 0);
+    if (!ng || (ng->scope == SCOPE_HOST))
+    {
+      printf("KRT: Received route %lu/%d with strange next-hop %lu",
+          net->n.prefix, net->n.pxlen, ra->gw);
+      return;
+    }
+  }
+  else
+  {
+    ra->dest = RTD_DEVICE;
+  }
+}
+
+static int alleged_route_source(enum wkrtsrc src)
+{
+  // TODO: When return RTPROT_BIRD?
+  switch (src)
+  {
+    case W_KRT_SRC_REDIRECT:
+      return KRT_SRC_REDIRECT;
+    case W_KRT_SRC_UNSPEC:
+      return KRT_SRC_UNKNOWN;
+    case W_KRT_SRC_STATIC:
+    case W_KRT_SRC_UNKNOWN:
+    default:
+      return KRT_SRC_ALIEN;
+  }
+}
+
+static void wstruct_fill_rte(rte *re, struct krt_proto *p, struct wrtentry *entry)
+{
+  re->u.krt.src = alleged_route_source(entry->src);
+  re->u.krt.proto = entry->src;
+  re->u.krt.type = 0; // TODO: Read from MIB_IPNET_ROW2 structure
+  re->u.krt.metric = (entry->metric == -1) ? 0 : entry->metric;
+
+  // TODO: Other rte members. See netlink or krt-sys.
+}
+
+void
+krt_do_scan(struct krt_proto *p)
+{
+  struct wrtentry *entries;
+  int idx, cnt;
+
+#ifdef IPV6
+  entries = win_rt_scan(6, &cnt);
+#else
+  entries = win_rt_scan(4, &cnt);
+#endif
+
+  rte *re;
+  rta ra = {
+    .src= p->p.main_source,
+    .source = RTS_INHERIT,
+    .scope = SCOPE_UNIVERSE,
+    .cast = RTC_UNICAST
+  };
+
+  for (idx = 0; idx < cnt; idx++)
+  {
+    wstruct_fill_rta(&ra, p, &entries[idx]);
+    re = rte_get_temp(&ra);
+    wstruct_fill_rte(re, p, &entries[idx]);
+    krt_got_route(p, re);
+  }
+
+
 
 }
 

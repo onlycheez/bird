@@ -35,7 +35,6 @@ static inline struct ifa * kif_get_primary_ip(struct iface *i) { return NULL; }
 #define NL_NUM_TABLES 256
 
 struct krt_params {
-  int table_id;				/* Kernel table ID we sync with */
 };
 
 struct krt_state {

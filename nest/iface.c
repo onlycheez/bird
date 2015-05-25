@@ -443,6 +443,19 @@ if_find_by_name(char *name)
   return NULL;
 }
 
+#ifdef BIRD_CYGWIN
+struct iface *
+if_find_by_luid(unsigned long luid)
+{
+  struct iface *i;
+
+  WALK_LIST(i, iface_list)
+    if (i->w_luid == luid)
+      return i;
+  return NULL;
+}
+#endif
+
 struct iface *
 if_get_by_name(char *name)
 {

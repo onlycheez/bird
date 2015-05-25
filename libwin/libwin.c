@@ -36,15 +36,15 @@ PSTR narrow_wstr(PCWSTR wstr)
   return str;
 }
 
-int addr_list_length(IP_ADAPTER_UNICAST_ADDRESS_LH *address)
+int addr_list_length(IP_ADAPTER_UNICAST_ADDRESS *address)
 {
-  IP_ADAPTER_UNICAST_ADDRESS_LH *addr = address;
+  IP_ADAPTER_UNICAST_ADDRESS *addr = address;
   int count = 0;
 
   while (addr)
   {
     count += 1;
-    addr = (IP_ADAPTER_UNICAST_ADDRESS_LH *)addr->Next;
+    addr = (IP_ADAPTER_UNICAST_ADDRESS *)addr->Next;
   }
 
   return count;
@@ -55,7 +55,7 @@ int addrs_count(IP_ADAPTER_ADDRESSES *adapter)
   int count = 0;
 
   count += addr_list_length(
-    (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstUnicastAddress);
+    (IP_ADAPTER_UNICAST_ADDRESS *)adapter->FirstUnicastAddress);
   //count += addr_list_length(
   //  (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstMulticastAddress);
   //count += addr_list_length(
@@ -64,10 +64,10 @@ int addrs_count(IP_ADAPTER_ADDRESSES *adapter)
   return count;
 }
 
-void get_addrs(IP_ADAPTER_UNICAST_ADDRESS_LH *address, struct wiface *wiface,
+void get_addrs(IP_ADAPTER_UNICAST_ADDRESS *address, struct wiface *wiface,
   int *idx)
 {
-  IP_ADAPTER_UNICAST_ADDRESS_LH *addr = address;
+  IP_ADAPTER_UNICAST_ADDRESS *addr = address;
 
   while (addr)
   {
@@ -118,12 +118,12 @@ struct wiface* win_if_scan(int ipv, int *cnt)
   {
     wifaces[i].flags = 0;
     wifaces[i].name = strdup(adapter->AdapterName);
+    wifaces[i].luid = adapter->Luid.Value;
     wifaces[i].index = adapter->IfIndex;
     wifaces[i].mtu = adapter->Mtu;
     wifaces[i].up = adapter->OperStatus;
     if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
     {
-      wifaces[i].flags |= W_IF_LOOPBACK;
       wifaces[i].flags |= W_IF_LOOPBACK;
     }
 
@@ -136,7 +136,7 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     if (adapter->FirstUnicastAddress)
     {
       get_addrs(
-        (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstUnicastAddress,
+        (IP_ADAPTER_UNICAST_ADDRESS *)adapter->FirstUnicastAddress,
         &wifaces[i], &addr_idx);
       wifaces[i].flags |= W_IF_MULTICAST;
     }
@@ -165,4 +165,62 @@ struct wiface* win_if_scan(int ipv, int *cnt)
   free(adapters);
 
   return wifaces;
+}
+
+static enum wkrtsrc convert_proto_type(int winapi_proto_type)
+{
+  // TODO: How should be KRT_SRC_BIRD & KRT_SRC_KERNEL set?
+  switch (winapi_proto_type)
+  {
+    case MIB_IPPROTO_ICMP:
+      return W_KRT_SRC_REDIRECT;
+    case MIB_IPPROTO_NT_STATIC:
+    case MIB_IPPROTO_NT_AUTOSTATIC:
+    case MIB_IPPROTO_NETMGMT:
+      return W_KRT_SRC_STATIC;
+    case MIB_IPPROTO_OTHER:
+      return W_KRT_SRC_UNSPEC;
+    default:
+      return W_KRT_SRC_UNKNOWN;
+  }
+}
+
+struct wrtentry* win_rt_scan(int ipv, int *cnt)
+{
+  printf("win_rt_scan called\n");
+  ADDRESS_FAMILY family = AF_INET;
+  if (ipv == 6)
+  {
+    family = AF_INET6;
+  }
+
+  struct wrtentry *rt_entries;
+  MIB_IPFORWARD_TABLE2 *table = NULL;
+  int idx;
+
+  GetIpForwardTable2(family, &table);
+  *cnt = table->NumEntries;
+  rt_entries = (struct wrtentry *)wmalloc(*cnt * sizeof(struct wrtentry));
+
+  for (idx = 0; idx , idx < *cnt; idx++)
+  {
+    printf("LUID: %lu\n", table->Table[idx].InterfaceLuid.Value);
+    rt_entries[idx].luid = table->Table[idx].InterfaceLuid.Value;
+    rt_entries[idx].src = convert_proto_type(table->Table[idx].Protocol);
+    rt_entries[idx].metric = table->Table[idx].Metric;
+    if (family == AF_INET6)
+    {
+    }
+    else
+    {
+      rt_entries[idx].next_hop = table->Table[idx].NextHop.Ipv4.sin_addr.S_un.S_addr;
+    }
+
+
+  }
+
+
+  FreeMibTable(table);
+
+  return rt_entries;
 }
