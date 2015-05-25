@@ -45,12 +45,20 @@ static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
   iface->w_luid = wif.luid;
 
   // TODO: Setting flags.
-
-  iface->flags |= (IF_MULTIACCESS | IF_MULTICAST);
-
-  if (wif.flags & W_IF_LOOPBACK)
+  switch (wif.type)
   {
-    iface->flags |= (IF_MULTIACCESS | IF_LOOPBACK | IF_IGNORE);
+    case W_IF_LOOPBACK:
+      iface->flags |= IF_MULTIACCESS | IF_LOOPBACK | IF_IGNORE;
+      break;
+    case W_IF_PTP:
+      iface->flags |= IF_MULTICAST;
+      break;
+    case W_IF_BROADCAST:
+      iface->flags |= IF_MULTIACCESS | IF_BROADCAST | IF_MULTICAST;
+      break;
+    case W_IF_MULTICAST:
+    default:
+      iface->flags |= IF_MULTICAST;
   }
 
   if (wif.up)

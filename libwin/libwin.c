@@ -80,6 +80,24 @@ void get_addrs(IP_ADAPTER_UNICAST_ADDRESS *address, struct wiface *wiface,
   }
 }
 
+static enum wiftype convert_access_type(NET_IF_ACCESS_TYPE access_type)
+{
+  switch (access_type)
+  {
+    case NET_IF_ACCESS_LOOPBACK:
+      return W_IF_LOOPBACK;
+    case NET_IF_ACCESS_BROADCAST:
+      return W_IF_BROADCAST;
+    case NET_IF_ACCESS_POINT_TO_POINT:
+      return W_IF_PTP;
+    case NET_IF_ACCESS_POINT_TO_MULTI_POINT:
+      return W_IF_MULTICAST;
+    case NET_IF_ACCESS_MAXIMUM:
+    default:
+      return W_IF_UNKOWN;
+  }
+}
+
 struct wiface* win_if_scan(int ipv, int *cnt)
 {
   printf("win_if_scan called\n");
@@ -122,11 +140,6 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     wifaces[i].index = adapter->IfIndex;
     wifaces[i].mtu = adapter->Mtu;
     wifaces[i].up = adapter->OperStatus;
-    if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
-    {
-      wifaces[i].flags |= W_IF_LOOPBACK;
-    }
-
 
     wifaces[i].addrs_cnt = addrs_count(adapter);
     wifaces[i].addrs = wmalloc(wifaces[i].addrs_cnt * sizeof(struct wifa));
@@ -156,6 +169,12 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     //    &wifaces[i], &addr_idx);
     //  wifaces[i].flags |= W_IF_MULTICAST;
     //}
+
+    MIB_IF_ROW2 *adapter_details = wmalloc(sizeof(MIB_IF_ROW2));
+    adapter_details->InterfaceIndex = adapter->IfIndex;
+    GetIfEntry2(adapter_details);
+    wifaces[i].type = convert_access_type(adapter_details->AccessType);
+    free(adapter_details);
 
     i += 1;
     adapter = adapter->Next;
