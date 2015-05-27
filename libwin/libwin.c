@@ -150,8 +150,15 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     printf("luid IfType: %u\n", adapter->Luid.Info.IfType);
     wifaces[i].index = adapter->IfIndex;
     wifaces[i].mtu = adapter->Mtu;
-    wifaces[i].up = adapter->OperStatus;
 
+    if (adapter->OperStatus != 1)
+    {
+      wifaces[i].up = 0;
+      wifaces[i].addrs_cnt = 0;
+      goto loopend;
+    }
+
+    wifaces[i].up = 1;
     wifaces[i].addrs_cnt = addrs_count(adapter);
     wifaces[i].addrs = wmalloc(wifaces[i].addrs_cnt * sizeof(struct wifa));
 
@@ -180,6 +187,7 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     //  wifaces[i].flags |= W_IF_MULTICAST;
     //}
 
+loopend:
     adapter_details.InterfaceLuid.Value = 0;
     adapter_details.InterfaceIndex = adapter->IfIndex;
     retval = GetIfEntry2(&adapter_details);
