@@ -89,6 +89,7 @@ static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
     return;
   }
 
+  ifa->pxlen = wifa->pxlen;
   ifa->ip = (ip_addr)wifa->addr;
   ipa_ntoh(ifa->ip);
 
@@ -243,7 +244,7 @@ static void wstruct_fill_rte(rte *re, struct krt_proto *p, struct wrtentry *entr
 {
   re->u.krt.src = alleged_route_source(entry->src);
   re->u.krt.proto = entry->src;
-  re->u.krt.type = 0; // TODO: Read from MIB_IPNET_ROW2 structure
+  re->u.krt.type = 0; // TODO: Read from MIB_IPNET_ROW2 structure, or not?
   re->u.krt.metric = (entry->metric == -1) ? 0 : entry->metric;
 
   // TODO: Other rte members. See netlink or krt-sys.
@@ -276,14 +277,23 @@ krt_do_scan(struct krt_proto *p)
     wstruct_fill_rte(re, p, &entries[idx]);
     krt_got_route(p, re);
   }
-
-
-
 }
 
 void
 krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old, struct ea_list *eattrs)
 {
+  return;
+  ip_addr gw, prefix;
+
+  if (old)
+  {
+    gw = old->attrs->gw;
+    prefix = old->net->n.prefix;
+    ipa_hton(gw);
+    ipa_hton(prefix);
+    win_rt_delete(old->net->n.pxlen, prefix, old->attrs->iface->w_luid, gw);
+  }
+
 
 }
 

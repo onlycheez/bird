@@ -17,6 +17,12 @@ enum wkrtsrc {
   W_KRT_SRC_UNSPEC
 };
 
+enum wdst {
+  W_DST_UNKOWN = 0,
+  W_DST_ROUTER,
+  W_DST_UNREACHABLE
+};
+
 struct wifa {
   unsigned long addr;
   unsigned long pxlen;

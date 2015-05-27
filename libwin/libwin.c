@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <iphlpapi.h>
+#include <Mstcpip.h>
 
 #include <stdio.h>
 
@@ -109,6 +110,7 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     family = AF_INET6;
 
   IP_ADAPTER_ADDRESSES *adapter, *adapters;
+  MIB_IF_ROW2 adapter_details;
   struct wiface *wifaces;
   int i, adapt_cnt, addr_idx;
 
@@ -120,6 +122,11 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     NULL,
     adapters,
     &size);
+  if (retval != ERROR_SUCCESS)
+  {
+    printf("GetAdaptersAddresses failed (0x%x)\n", retval);
+    return;
+  }
 
   adapter = adapters;
   adapt_cnt = 0;
@@ -137,6 +144,10 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     wifaces[i].flags = 0;
     wifaces[i].name = strdup(adapter->AdapterName);
     wifaces[i].luid = adapter->Luid.Value;
+    printf("GetAdaptersAddresses LUID: 0x%llx\n", adapter->Luid.Value);
+    printf("luid Reserved: %u\n", adapter->Luid.Info.Reserved);
+    printf("luid NetLuidIndex: %u\n", adapter->Luid.Info.NetLuidIndex);
+    printf("luid IfType: %u\n", adapter->Luid.Info.IfType);
     wifaces[i].index = adapter->IfIndex;
     wifaces[i].mtu = adapter->Mtu;
     wifaces[i].up = adapter->OperStatus;
@@ -151,7 +162,6 @@ struct wiface* win_if_scan(int ipv, int *cnt)
       get_addrs(
         (IP_ADAPTER_UNICAST_ADDRESS *)adapter->FirstUnicastAddress,
         &wifaces[i], &addr_idx);
-      wifaces[i].flags |= W_IF_MULTICAST;
     }
 
     //if (adapter->FirstMulticastAddress)
@@ -170,11 +180,15 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     //  wifaces[i].flags |= W_IF_MULTICAST;
     //}
 
-    MIB_IF_ROW2 *adapter_details = wmalloc(sizeof(MIB_IF_ROW2));
-    adapter_details->InterfaceIndex = adapter->IfIndex;
-    GetIfEntry2(adapter_details);
-    wifaces[i].type = convert_access_type(adapter_details->AccessType);
-    free(adapter_details);
+    adapter_details.InterfaceLuid.Value = 0;
+    adapter_details.InterfaceIndex = adapter->IfIndex;
+    retval = GetIfEntry2(&adapter_details);
+    if (retval != ERROR_SUCCESS)
+    {
+      printf("GetIfEntry2 failed failed (0x%x)\n", retval);
+    }
+
+    wifaces[i].type = convert_access_type(adapter_details.AccessType);
 
     i += 1;
     adapter = adapter->Next;
@@ -204,6 +218,9 @@ static enum wkrtsrc convert_proto_type(int winapi_proto_type)
   }
 }
 
+char ipstr[16];
+char luidstr[256];
+
 struct wrtentry* win_rt_scan(int ipv, int *cnt)
 {
   printf("win_rt_scan called\n");
@@ -213,33 +230,99 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
     family = AF_INET6;
   }
 
+  DWORD retval;
   struct wrtentry *rt_entries;
-  MIB_IPFORWARD_TABLE2 *table = NULL;
+  MIB_IPFORWARD_TABLE2 *routes = NULL;
+  MIB_IPFORWARD_ROW2 *route;
   int idx;
 
-  GetIpForwardTable2(family, &table);
-  *cnt = table->NumEntries;
-  rt_entries = (struct wrtentry *)wmalloc(*cnt * sizeof(struct wrtentry));
-
-  for (idx = 0; idx , idx < *cnt; idx++)
+  retval = GetIpForwardTable2(family, &routes);
+  if (retval != ERROR_SUCCESS)
   {
-    printf("LUID: %lu\n", table->Table[idx].InterfaceLuid.Value);
-    rt_entries[idx].luid = table->Table[idx].InterfaceLuid.Value;
-    rt_entries[idx].src = convert_proto_type(table->Table[idx].Protocol);
-    rt_entries[idx].metric = table->Table[idx].Metric;
+    printf("GetIpForwardTable2 failed (0x%x)\n", retval);
+    return;
+  }
+
+  *cnt = routes->NumEntries;
+  rt_entries = (struct wrtentry *)wmalloc(*cnt * sizeof(struct wrtentry));
+  printf("Routes count %d\n", *cnt);
+
+
+  int real_count = 0;
+  for (idx = 0; idx < *cnt; idx++)
+  {
+    route = routes->Table + idx;
+
+    if (route->InterfaceLuid.Info.IfType == 0 ||
+        route->DestinationPrefix.PrefixLength > 32 ||
+        !(route->Protocol >= 1 && route->Protocol <= 14))
+    {
+      continue;
+    }
+
+    printf("GetIpForwardTable2 LUID: %l64x\n", route->InterfaceLuid.Value);
+    printf("luid Reserved: %u\n", route->InterfaceLuid.Info.Reserved);
+    printf("luid NetLuidIndex: %u\n", route->InterfaceLuid.Info.NetLuidIndex);
+    printf("luid IfType: %u\n", route->InterfaceLuid.Info.IfType);
+    printf("Route origin %lu\n", route->Origin);
+    printf("Route loopback %lu\n", route->Loopback);
+    printf("Route protocol %lu\n", route->Protocol);
+
+    rt_entries[idx].luid = route->InterfaceLuid.Value;
+    rt_entries[idx].src = convert_proto_type(route->Protocol);
+    rt_entries[idx].metric = route->Metric;
     if (family == AF_INET6)
     {
     }
     else
     {
-      rt_entries[idx].next_hop = table->Table[idx].NextHop.Ipv4.sin_addr.S_un.S_addr;
+      rt_entries[idx].next_hop = route->NextHop.Ipv4.sin_addr.S_un.S_addr;
+      printf("IPV4: (%lu) %s\n",
+        rt_entries[idx].next_hop, inet_ntoa((route->NextHop.Ipv4.sin_addr)));
     }
 
+    MIB_IPNET_ROW2 ipnet;
+    ipnet.InterfaceLuid = route->InterfaceLuid;
+    ipnet.Address.Ipv4 = route->NextHop.Ipv4;
+    printf("ADDR: %lu\n", ipnet.Address.Ipv4.sin_addr.S_un.S_addr);
+    retval = GetIpNetEntry2(&ipnet);
+    if (retval != ERROR_SUCCESS)
+    {
+      printf("GetIpNetEntry2 failed (0x%x)\n", retval);
+    }
 
+    real_count += 1;
+  }
+  *cnt = real_count;
+
+  int fuck;
+  MIB_IPNET_TABLE2 *ipnet_table = NULL;
+  retval = GetIpNetTable2(AF_INET, &ipnet_table);
+  printf("GetIpNetTable2 result: 0x%x\n", retval);
+
+  for (fuck = 0; fuck < ipnet_table->NumEntries; fuck++)
+  {
+    printf("  luid: %lx\n", ipnet_table->Table[fuck].InterfaceLuid.Value);
+    printf("  ip hton: (%lu) %s\n",
+      ipnet_table->Table[fuck].Address.Ipv4.sin_addr.S_un.S_addr,
+      (inet_ntoa(ipnet_table->Table[fuck].Address.Ipv4.sin_addr)));
   }
 
-
-  FreeMibTable(table);
+  FreeMibTable(routes);
 
   return rt_entries;
+}
+
+void win_rt_delete(int dest_pxlen, int dest_prefix, int next_hop, unsigned long luid)
+{
+  MIB_IPFORWARD_ROW2 entry;
+  entry.InterfaceLuid.Value = luid;
+  entry.DestinationPrefix.PrefixLength = dest_pxlen;
+  entry.DestinationPrefix.Prefix.Ipv4.sin_family = AF_INET;
+  entry.DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr = dest_prefix;
+  entry.NextHop.Ipv4.sin_family = AF_INET;
+  entry.NextHop.Ipv4.sin_addr.S_un.S_addr = next_hop;
+
+  int ret = DeleteIpForwardEntry2(&entry);
+  printf("DeleteIpForwardEntry2 retval 0x%x\n", ret);
 }
