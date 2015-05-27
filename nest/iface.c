@@ -445,12 +445,12 @@ if_find_by_name(char *name)
 
 #ifdef BIRD_CYGWIN
 struct iface *
-if_find_by_luid(unsigned long luid)
+if_find_by_luid(unsigned long long luid)
 {
   struct iface *i;
 
   WALK_LIST(i, iface_list)
-    if (i->w_luid == luid)
+    if (i->luid == luid)
       return i;
   return NULL;
 }

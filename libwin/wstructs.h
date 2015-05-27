@@ -41,7 +41,7 @@ struct wiface {
 };
 
 struct wrtentry {
-  unsigned long luid;
+  unsigned long long luid;
   enum wkrtsrc src;
   unsigned long next_hop;
   unsigned long metric;

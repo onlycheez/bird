@@ -42,7 +42,7 @@ static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
   memcpy(iface->name, wif.name, strlen(wif.name));
   iface->index = (unsigned)wif.index;
   iface->mtu = (unsigned)wif.mtu;
-  iface->w_luid = wif.luid;
+  iface->luid = wif.luid;
 
   // TODO: Setting flags.
   switch (wif.type)
@@ -291,7 +291,7 @@ krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old, struct ea_list 
     prefix = old->net->n.prefix;
     ipa_hton(gw);
     ipa_hton(prefix);
-    win_rt_delete(old->net->n.pxlen, prefix, old->attrs->iface->w_luid, gw);
+    win_rt_delete(old->net->n.pxlen, prefix, old->attrs->iface->luid, gw);
   }
 
 

@@ -313,7 +313,8 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   return rt_entries;
 }
 
-void win_rt_delete(int dest_pxlen, int dest_prefix, int next_hop, unsigned long luid)
+void win_rt_delete(int dest_pxlen, int dest_prefix, int next_hop,
+  unsigned long long luid)
 {
   MIB_IPFORWARD_ROW2 entry;
   entry.InterfaceLuid.Value = luid;

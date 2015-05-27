@@ -38,7 +38,7 @@ struct iface {
   struct ifa *addr;			/* Primary address */
   list neighbors;			/* All neighbors on this interface */
 #ifdef BIRD_CYGWIN
-  unsigned long w_luid;  /* Interface identifier on Windows */
+  unsigned long long luid;  /* Interface identifier on Windows */
 #endif
 };
 
@@ -103,7 +103,7 @@ struct iface *if_find_by_index(unsigned);
 struct iface *if_find_by_name(char *);
 struct iface *if_get_by_name(char *);
 #ifdef BIRD_CYGWIN
-struct iface *if_find_by_luid(unsigned long luid);
+struct iface *if_find_by_luid(unsigned long long luid);
 #endif
 void ifa_recalc_all_primary_addresses(void);
 
