@@ -30,7 +30,7 @@ struct wifa {
 
 struct wiface {
   char *name;
-  unsigned long luid;
+  unsigned long long luid;
   unsigned flags;
   enum wiftype type;
   unsigned long mtu;

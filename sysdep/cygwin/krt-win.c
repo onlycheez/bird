@@ -197,7 +197,7 @@ static void wstruct_fill_rta(rta *ra, struct krt_proto *p, struct wrtentry *entr
   ra->iface = if_find_by_luid(entry->luid);
   if (!ra->iface)
   {
-    printf("wstruct_fill_rta: iface with luid %lu not found.\n");
+    printf("wstruct_fill_rta: iface with luid %lx not found.\n", entry->luid);
     return;
   }
 
@@ -272,11 +272,18 @@ krt_do_scan(struct krt_proto *p)
 
   for (idx = 0; idx < cnt; idx++)
   {
-    wstruct_fill_rta(&ra, p, &entries[idx]);
+    wstruct_fill_rta(&ra, p, entries + idx);
+    if (!ra.iface)
+    {
+      continue;
+    }
+
     re = rte_get_temp(&ra);
-    wstruct_fill_rte(re, p, &entries[idx]);
+    wstruct_fill_rte(re, p, entries + idx);
     krt_got_route(p, re);
   }
+
+  free(entries);
 }
 
 void

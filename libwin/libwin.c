@@ -226,6 +226,25 @@ static enum wkrtsrc convert_proto_type(int winapi_proto_type)
   }
 }
 
+static int is_iftype_valid(int iftype)
+{
+  switch (iftype)
+  {
+    case IF_TYPE_OTHER:
+    case IF_TYPE_ETHERNET_CSMACD:
+    case IF_TYPE_ISO88025_TOKENRING:
+    case IF_TYPE_PPP:
+    case IF_TYPE_SOFTWARE_LOOPBACK:
+    case IF_TYPE_ATM:
+    case IF_TYPE_IEEE80211:
+    case IF_TYPE_TUNNEL:
+    case IF_TYPE_IEEE1394:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 char ipstr[16];
 char luidstr[256];
 
@@ -261,17 +280,18 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   {
     route = routes->Table + idx;
 
-    if (route->InterfaceLuid.Info.IfType == 0 ||
+    if (!is_iftype_valid(route->InterfaceLuid.Info.IfType) ||
         route->DestinationPrefix.PrefixLength > 32 ||
         !(route->Protocol >= 1 && route->Protocol <= 14))
     {
       continue;
     }
 
-    printf("GetIpForwardTable2 LUID: %l64x\n", route->InterfaceLuid.Value);
-    printf("luid Reserved: %u\n", route->InterfaceLuid.Info.Reserved);
-    printf("luid NetLuidIndex: %u\n", route->InterfaceLuid.Info.NetLuidIndex);
-    printf("luid IfType: %u\n", route->InterfaceLuid.Info.IfType);
+    printf("GetIpForwardTable2 LUID: %lx\n", route->InterfaceLuid.Value);
+    printf("luid Reserved: %u, NetLuidIndex: %u, IfType: %u\n",
+      route->InterfaceLuid.Info.Reserved,
+      route->InterfaceLuid.Info.NetLuidIndex,
+      route->InterfaceLuid.Info.IfType);
     printf("Route origin %lu\n", route->Origin);
     printf("Route loopback %lu\n", route->Loopback);
     printf("Route protocol %lu\n", route->Protocol);
@@ -303,18 +323,18 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   }
   *cnt = real_count;
 
-  int fuck;
-  MIB_IPNET_TABLE2 *ipnet_table = NULL;
-  retval = GetIpNetTable2(AF_INET, &ipnet_table);
-  printf("GetIpNetTable2 result: 0x%x\n", retval);
-
-  for (fuck = 0; fuck < ipnet_table->NumEntries; fuck++)
-  {
-    printf("  luid: %lx\n", ipnet_table->Table[fuck].InterfaceLuid.Value);
-    printf("  ip hton: (%lu) %s\n",
-      ipnet_table->Table[fuck].Address.Ipv4.sin_addr.S_un.S_addr,
-      (inet_ntoa(ipnet_table->Table[fuck].Address.Ipv4.sin_addr)));
-  }
+  //int fuck;
+  //MIB_IPNET_TABLE2 *ipnet_table = NULL;
+  //retval = GetIpNetTable2(AF_INET, &ipnet_table);
+  //printf("GetIpNetTable2 result: 0x%x\n", retval);
+  //
+  //for (fuck = 0; fuck < ipnet_table->NumEntries; fuck++)
+  //{
+  //  printf("  luid: %lx\n", ipnet_table->Table[fuck].InterfaceLuid.Value);
+  //  printf("  ip hton: (%lu) %s\n",
+  //    ipnet_table->Table[fuck].Address.Ipv4.sin_addr.S_un.S_addr,
+  //    (inet_ntoa(ipnet_table->Table[fuck].Address.Ipv4.sin_addr)));
+  //}
 
   FreeMibTable(routes);
 
