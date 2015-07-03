@@ -191,39 +191,6 @@ krt_sys_shutdown(struct krt_proto *p UNUSED)
 
 }
 
-static void wstruct_fill_rta(rta *ra, struct krt_proto *p, struct wrtentry *entry)
-{
-  // TODO: Check whether Windows distinguishes route/device and supports multipath.
-  ra->iface = if_find_by_luid(entry->luid);
-  if (!ra->iface)
-  {
-    printf("wstruct_fill_rta: iface with luid %lx not found.\n", entry->luid);
-    return;
-  }
-
-  if (entry->next_hop != 0)
-  {
-    ra->dest = RTD_ROUTER;
-    ra->gw = entry->next_hop;
-    ipa_ntoh(ra->gw);
-
-    // TODO: Last parameter should be some real length.
-    net *net = net_get(p->p.table, ra->dest, 0);
-
-    neighbor *ng = neigh_find2(&p->p, &ra->gw, ra->iface, 0);
-    if (!ng || (ng->scope == SCOPE_HOST))
-    {
-      printf("KRT: Received route %lu/%d with strange next-hop %lu",
-          net->n.prefix, net->n.pxlen, ra->gw);
-      return;
-    }
-  }
-  else
-  {
-    ra->dest = RTD_DEVICE;
-  }
-}
-
 static int alleged_route_source(enum wkrtsrc src)
 {
   // TODO: When return RTPROT_BIRD?
@@ -240,14 +207,77 @@ static int alleged_route_source(enum wkrtsrc src)
   }
 }
 
-static void wstruct_fill_rte(rte *re, struct krt_proto *p, struct wrtentry *entry)
+static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
 {
+  // TODO: Check whether Windows supports multipath.
+
+  ip_addr idst, igw;
+  idst = entry->dst;
+  ipa_ntoh(idst);
+  igw = entry->next_hop;
+  ipa_ntoh(igw);
+
+  int c = ipa_classify_net(idst);
+  if ((c < 0) || !(c & IADDR_HOST) || ((c & IADDR_SCOPE_MASK) <= SCOPE_LINK))
+  {
+    printf("strange class/scope\n");
+    return;
+  }
+
+  rte *re;
+  rta ra = {
+    .src= p->p.main_source,
+    .source = RTS_INHERIT,
+    .scope = SCOPE_UNIVERSE,
+    .cast = RTC_UNICAST
+  };
+  net *net = net_get(p->p.table, idst, entry->pxlen);
+
+  if (entry->is_unreachable)
+  {
+    ra.dest = RTD_UNREACHABLE;
+    goto done;
+  }
+
+  ra.iface = if_find_by_luid(entry->luid);
+  if (!ra.iface)
+  {
+    printf("wstruct_fill_rta: iface with luid %lx not found.\n", entry->luid);
+    return;
+  }
+
+  if (entry->next_hop != 0)
+  {
+    /* There is some gateway in the way. */
+    ra.dest = RTD_ROUTER;
+    ra.gw = igw;
+
+    neighbor *ng = neigh_find2(&p->p, &ra.gw, ra.iface, 0);
+    if (!ng || (ng->scope == SCOPE_HOST))
+    {
+      printf("KRT: Received route %lu/%d with strange next-hop %lu",
+          net->n.prefix, net->n.pxlen, ra.gw);
+      return;
+    }
+  }
+  else
+  {
+    /* This is a host route or a loobpack route. */
+    printf("RTD_DEVICE\n");
+    ra.dest = RTD_DEVICE;
+  }
+
+done:
+  re = rte_get_temp(&ra);
+  re->net = net;
   re->u.krt.src = alleged_route_source(entry->src);
-  re->u.krt.proto = entry->src;
-  re->u.krt.type = 0; // TODO: Read from MIB_IPNET_ROW2 structure, or not?
+  re->u.krt.proto = entry->proto_id;
+  re->u.krt.type = 0;
   re->u.krt.metric = (entry->metric == -1) ? 0 : entry->metric;
 
-  // TODO: Other rte members. See netlink or krt-sys.
+  krt_got_route(p, re);
+
+  // TODO: Maybe other rte members. See netlink.
 }
 
 void
@@ -262,25 +292,9 @@ krt_do_scan(struct krt_proto *p)
   entries = win_rt_scan(4, &cnt);
 #endif
 
-  rte *re;
-  rta ra = {
-    .src= p->p.main_source,
-    .source = RTS_INHERIT,
-    .scope = SCOPE_UNIVERSE,
-    .cast = RTC_UNICAST
-  };
-
   for (idx = 0; idx < cnt; idx++)
   {
-    wstruct_fill_rta(&ra, p, entries + idx);
-    if (!ra.iface)
-    {
-      continue;
-    }
-
-    re = rte_get_temp(&ra);
-    wstruct_fill_rte(re, p, entries + idx);
-    krt_got_route(p, re);
+    wkrt_parse_route(p, entries + idx);
   }
 
   free(entries);
@@ -300,8 +314,6 @@ krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old, struct ea_list 
     ipa_hton(prefix);
     win_rt_delete(old->net->n.pxlen, prefix, old->attrs->iface->luid, gw);
   }
-
-
 }
 
 int

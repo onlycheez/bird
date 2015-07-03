@@ -43,8 +43,12 @@ struct wiface {
 struct wrtentry {
   unsigned long long luid;
   enum wkrtsrc src;
-  unsigned long next_hop;
+  unsigned next_hop;
+  unsigned dst;
+  unsigned long pxlen;
   unsigned long metric;
+  unsigned long proto_id;
+  int is_unreachable;
 };
 
 #endif

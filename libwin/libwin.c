@@ -1,9 +1,7 @@
 
-#include <windows.h>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <iphlpapi.h>
-#include <Mstcpip.h>
-
 #include <stdio.h>
 
 #include "wstructs.h"
@@ -274,13 +272,13 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   rt_entries = (struct wrtentry *)wmalloc(*cnt * sizeof(struct wrtentry));
   printf("Routes count %d\n", *cnt);
 
-
   int real_count = 0;
   for (idx = 0; idx < *cnt; idx++)
   {
     route = routes->Table + idx;
 
-    if (!is_iftype_valid(route->InterfaceLuid.Info.IfType) ||
+    if (route->NextHop.Ipv4.sin_addr.S_un.S_addr == 0 || // IPV6
+        !is_iftype_valid(route->InterfaceLuid.Info.IfType) ||
         route->DestinationPrefix.PrefixLength > 32 ||
         !(route->Protocol >= 1 && route->Protocol <= 14))
     {
@@ -296,45 +294,46 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
     printf("Route loopback %lu\n", route->Loopback);
     printf("Route protocol %lu\n", route->Protocol);
 
-    rt_entries[idx].luid = route->InterfaceLuid.Value;
-    rt_entries[idx].src = convert_proto_type(route->Protocol);
-    rt_entries[idx].metric = route->Metric;
+    rt_entries[real_count].luid = route->InterfaceLuid.Value;
+    rt_entries[real_count].src = convert_proto_type(route->Protocol);
+    rt_entries[real_count].metric = route->Metric;
+    rt_entries[real_count].proto_id = (int)route->Protocol;
     if (family == AF_INET6)
     {
     }
     else
     {
-      rt_entries[idx].next_hop = route->NextHop.Ipv4.sin_addr.S_un.S_addr;
-      printf("IPV4: (%lu) %s\n",
-        rt_entries[idx].next_hop, inet_ntoa((route->NextHop.Ipv4.sin_addr)));
+      rt_entries[real_count].next_hop = route->NextHop.Ipv4.sin_addr.S_un.S_addr;
+      rt_entries[real_count].dst = route->DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr;
+      rt_entries[real_count].pxlen = route->DestinationPrefix.PrefixLength;
+
+      printf("hop: (%lu) %s\n",
+        rt_entries[real_count].next_hop, inet_ntoa((route->NextHop.Ipv4.sin_addr)));
+      printf("prefix (%lu) : %s\n", rt_entries[real_count].dst,
+        inet_ntoa(route->DestinationPrefix.Prefix.Ipv4.sin_addr));
+      printf("pxlen: %lu\n", rt_entries[real_count].pxlen);
     }
 
     MIB_IPNET_ROW2 ipnet;
     ipnet.InterfaceLuid = route->InterfaceLuid;
     ipnet.Address.Ipv4 = route->NextHop.Ipv4;
-    printf("ADDR: %lu\n", ipnet.Address.Ipv4.sin_addr.S_un.S_addr);
     retval = GetIpNetEntry2(&ipnet);
     if (retval != ERROR_SUCCESS)
     {
       printf("GetIpNetEntry2 failed (0x%x)\n", retval);
     }
+    else
+    {
+      // TODO: How about other states?
+      rt_entries[real_count].is_unreachable = (ipnet.State == NlnsUnreachable);
+      printf("  State: %u\n", ipnet.State);
+      printf("  IsRouter: %u\n", ipnet.IsRouter);
+      printf("  IsUnreachable: %u\n", ipnet.IsUnreachable);
+    }
 
     real_count += 1;
   }
   *cnt = real_count;
-
-  //int fuck;
-  //MIB_IPNET_TABLE2 *ipnet_table = NULL;
-  //retval = GetIpNetTable2(AF_INET, &ipnet_table);
-  //printf("GetIpNetTable2 result: 0x%x\n", retval);
-  //
-  //for (fuck = 0; fuck < ipnet_table->NumEntries; fuck++)
-  //{
-  //  printf("  luid: %lx\n", ipnet_table->Table[fuck].InterfaceLuid.Value);
-  //  printf("  ip hton: (%lu) %s\n",
-  //    ipnet_table->Table[fuck].Address.Ipv4.sin_addr.S_un.S_addr,
-  //    (inet_ntoa(ipnet_table->Table[fuck].Address.Ipv4.sin_addr)));
-  //}
 
   FreeMibTable(routes);
 
