@@ -12,6 +12,7 @@ enum wiftype {
 
 enum wkrtsrc {
   W_KRT_SRC_UNKNOWN = 0,
+  W_KRT_SRC_BIRD,
   W_KRT_SRC_REDIRECT,
   W_KRT_SRC_STATIC,
   W_KRT_SRC_UNSPEC

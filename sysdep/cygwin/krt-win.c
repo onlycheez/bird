@@ -196,6 +196,8 @@ static int alleged_route_source(enum wkrtsrc src)
   // TODO: When return RTPROT_BIRD?
   switch (src)
   {
+    case W_KRT_SRC_BIRD:
+      return KRT_SRC_BIRD;
     case W_KRT_SRC_REDIRECT:
       return KRT_SRC_REDIRECT;
     case W_KRT_SRC_UNSPEC:
@@ -273,7 +275,8 @@ done:
   re->u.krt.src = alleged_route_source(entry->src);
   re->u.krt.proto = entry->proto_id;
   re->u.krt.type = 0;
-  re->u.krt.metric = (entry->metric == -1) ? 0 : entry->metric;
+  //re->u.krt.metric = (entry->metric == -1) ? 0 : entry->metric;
+  re->u.krt.metric = 0;
 
   krt_got_route(p, re);
 
@@ -300,19 +303,67 @@ krt_do_scan(struct krt_proto *p)
   free(entries);
 }
 
-void
-krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old, struct ea_list *eattrs)
+static void wstruct_init_wrtentry(struct wrtentry *entry, rte *re)
 {
-  return;
-  ip_addr gw, prefix;
+  net *net = re->net;
+  rta *ra = re->attrs;
+  struct iface *iface = ra->iface;
+
+  entry->luid = iface->luid;
+  entry->proto_id = KRT_SRC_BIRD;
+
+  if (ra->dest == RTD_ROUTER)
+  {
+    entry->dst = net->n.prefix;
+    ipa_hton(entry->dst);
+    entry->next_hop = ra->gw;
+    ipa_hton(entry->next_hop);
+    entry->pxlen = net->n.pxlen;
+  }
+  else if (ra->dest == RTD_DEVICE)
+  {
+    entry->next_hop = 0;
+    entry->dst = net->n.prefix;
+    ipa_hton(entry->dst);
+    entry->pxlen = net->n.pxlen;
+  }
+  else if (ra->dest == RTD_BLACKHOLE)
+  {
+    /* Windows doesn't support blackhole so invalid ip is used instead. */
+    entry->dst = 0;
+    entry->next_hop = 0;
+    entry->pxlen = MAX_PREFIX_LENGTH;
+  }
+  else
+  {
+    printf("Unhandled destination type: %d\n", ra->dest);
+  }
+}
+
+void
+krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old,
+  struct ea_list *eattrs)
+{
+  struct wrtentry entry;
 
   if (old)
   {
-    gw = old->attrs->gw;
-    prefix = old->net->n.prefix;
-    ipa_hton(gw);
-    ipa_hton(prefix);
-    win_rt_delete(old->net->n.pxlen, prefix, old->attrs->iface->luid, gw);
+    wstruct_init_wrtentry(&entry, old);
+#ifdef IPV6
+    win_rt_delete(&entry, 6);
+#else
+    win_rt_delete(&entry, 4);
+#endif
+  }
+
+  if (new)
+  {
+    wstruct_init_wrtentry(&entry, new);
+#ifdef IPV6
+    win_rt_create(&entry, 6);
+#else
+    win_rt_create(&entry, 4);
+#endif
   }
 }
 

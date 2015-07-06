@@ -8,6 +8,7 @@
 
 /* GUID length + 2 for parenthesis */
 #define GUID_LENGTH 39
+#define MIB_IPROTO_BIRD 11001
 
 void die(const char *msg, ...) __attribute__((noreturn));
 
@@ -208,9 +209,11 @@ loopend:
 
 static enum wkrtsrc convert_proto_type(int winapi_proto_type)
 {
-  // TODO: How should be KRT_SRC_BIRD & KRT_SRC_KERNEL set?
+  // TODO: How should be KRT_SRC_KERNEL set?
   switch (winapi_proto_type)
   {
+    case MIB_IPROTO_BIRD:
+      return W_KRT_SRC_BIRD;
     case MIB_IPPROTO_ICMP:
       return W_KRT_SRC_REDIRECT;
     case MIB_IPPROTO_NT_STATIC:
@@ -259,7 +262,6 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   struct wrtentry *rt_entries;
   MIB_IPFORWARD_TABLE2 *routes = NULL;
   MIB_IPFORWARD_ROW2 *route;
-  int idx;
 
   retval = GetIpForwardTable2(family, &routes);
   if (retval != ERROR_SUCCESS)
@@ -272,7 +274,7 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   rt_entries = (struct wrtentry *)wmalloc(*cnt * sizeof(struct wrtentry));
   printf("Routes count %d\n", *cnt);
 
-  int real_count = 0;
+  int idx, real_count = 0;
   for (idx = 0; idx < *cnt; idx++)
   {
     route = routes->Table + idx;
@@ -340,17 +342,53 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   return rt_entries;
 }
 
-void win_rt_delete(int dest_pxlen, int dest_prefix, int next_hop,
-  unsigned long long luid)
+static ip_forward_entry_set_addresses(MIB_IPFORWARD_ROW2 *route,
+  struct wrtentry *entry, int ipv)
 {
-  MIB_IPFORWARD_ROW2 entry;
-  entry.InterfaceLuid.Value = luid;
-  entry.DestinationPrefix.PrefixLength = dest_pxlen;
-  entry.DestinationPrefix.Prefix.Ipv4.sin_family = AF_INET;
-  entry.DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr = dest_prefix;
-  entry.NextHop.Ipv4.sin_family = AF_INET;
-  entry.NextHop.Ipv4.sin_addr.S_un.S_addr = next_hop;
+  if (ipv == 6)
+  {
 
-  int ret = DeleteIpForwardEntry2(&entry);
-  printf("DeleteIpForwardEntry2 retval 0x%x\n", ret);
+  }
+  else
+  {
+    route->DestinationPrefix.PrefixLength = entry->pxlen;
+    route->DestinationPrefix.Prefix.Ipv4.sin_family = AF_INET;
+    route->DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr = entry->dst;
+
+    route->NextHop.Ipv4.sin_family = AF_INET;
+    route->NextHop.Ipv4.sin_addr.S_un.S_addr = entry->next_hop;
+  }
+}
+
+void win_rt_delete(struct wrtentry *entry, int ipv)
+{
+  MIB_IPFORWARD_ROW2 route;
+  route.InterfaceLuid.Value = entry->luid;
+  ip_forward_entry_set_addresses(&route, entry, ipv);
+
+  int retval = DeleteIpForwardEntry2(&route);
+  if (retval != ERROR_SUCCESS)
+  {
+    printf("DeleteIpForwardEntry2 failed (0x%x)\n", retval);
+  }
+}
+
+void win_rt_create(struct wrtentry *entry, int ipv)
+{
+  int retval;
+  MIB_IPFORWARD_ROW2 route;
+  InitializeIpForwardEntry(&route);
+
+  route.InterfaceLuid.Value = entry->luid;
+  ip_forward_entry_set_addresses(&route, entry, ipv);
+
+  route.Loopback = FALSE;
+  route.Metric = -1;
+  route.Protocol = MIB_IPROTO_BIRD;
+
+  retval = CreateIpForwardEntry2(&route);
+  if (retval != ERROR_SUCCESS)
+  {
+    printf("CreateIpForwardEntry2 failed (0x%x)\n", retval);
+  }
 }

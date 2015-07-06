@@ -30,7 +30,11 @@ struct ifa {				/* Interface address */
 
 struct iface {
   node n;
+#ifdef BIRD_CYGWIN
   char name[128];
+#else
+  char name[32];
+#endif
   unsigned flags;
   unsigned mtu;
   unsigned index;			/* OS-dependent interface index */

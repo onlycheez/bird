@@ -241,7 +241,7 @@ export_filter(struct announce_hook *ah, rte *rt0, rte **rt_free, ea_list **tmpa,
 	goto reject;
 
       stats->exp_updates_filtered++;
-      rte_trace_out(D_FILTERS, p, rt, "filtered out");
+      rte_trace_out(D_FILTERS, p, rt, "filtered out (export_filter)");
       goto reject;
     }
 
@@ -369,7 +369,7 @@ rt_notify_basic(struct announce_hook *ah, net *net, rte *new, rte *old, ea_list 
    * FIXME - this is broken because 'configure soft' may change
    * filters but keep routes. Refeed is expected to be called after
    * change of the filters and with old == new, therefore we do not
-   * even try to run the filter on an old route, This may lead to 
+   * even try to run the filter on an old route, This may lead to
    * 'spurious withdraws' but ensure that there are no 'missing
    * withdraws'.
    *
@@ -436,9 +436,9 @@ rt_notify_accepted(struct announce_hook *ah, net *net, rte *new_changed, rte *ol
 	old_meet = 1;
     }
 
-  /* 
+  /*
    * Second, handle the feed case. That means we do not care for
-   * old_best. It is NULL for feed, and the new_best for refeed. 
+   * old_best. It is NULL for feed, and the new_best for refeed.
    * For refeed, there is a hack similar to one in rt_notify_basic()
    * to ensure withdraws in case of changed filters
    */
@@ -1003,7 +1003,7 @@ rte_update2(struct announce_hook *ah, net *net, rte *new, struct rte_src *src)
       if (filter == FILTER_REJECT)
 	{
 	  stats->imp_updates_filtered++;
-	  rte_trace_in(D_FILTERS, p, new, "filtered out");
+	  rte_trace_in(D_FILTERS, p, new, "filtered out (rte_update2 1)");
 
 	  if (! ah->in_keep_filtered)
 	    goto drop;
@@ -1021,7 +1021,7 @@ rte_update2(struct announce_hook *ah, net *net, rte *new, struct rte_src *src)
 	      if (fr > F_ACCEPT)
 		{
 		  stats->imp_updates_filtered++;
-		  rte_trace_in(D_FILTERS, p, new, "filtered out");
+		  rte_trace_in(D_FILTERS, p, new, "filtered out (rte_update2 2)");
 
 		  if (! ah->in_keep_filtered)
 		    goto drop;
@@ -1064,7 +1064,7 @@ rte_update2(struct announce_hook *ah, net *net, rte *new, struct rte_src *src)
 
 /* Independent call to rte_announce(), used from next hop
    recalculation, outside of rte_update(). new must be non-NULL */
-static inline void 
+static inline void
 rte_announce_i(rtable *tab, unsigned type, net *n, rte *new, rte *old)
 {
   ea_list *tmpa;
@@ -1114,7 +1114,7 @@ rt_examine(rtable *t, ip_addr prefix, int pxlen, struct proto *p, struct filter 
 /**
  * rt_refresh_begin - start a refresh cycle
  * @t: related routing table
- * @ah: related announce hook 
+ * @ah: related announce hook
  *
  * This function starts a refresh cycle for given routing table and announce
  * hook. The refresh cycle is a sequence where the protocol sends all its valid
@@ -1144,7 +1144,7 @@ rt_refresh_begin(rtable *t, struct announce_hook *ah)
 /**
  * rt_refresh_end - end a refresh cycle
  * @t: related routing table
- * @ah: related announce hook 
+ * @ah: related announce hook
  *
  * This function starts a refresh cycle for given routing table and announce
  * hook. See rt_refresh_begin() for description of refresh cycles.
@@ -1498,7 +1498,7 @@ rt_preconfig(struct config *c)
 }
 
 
-/* 
+/*
  * Some functions for handing internal next hop updates
  * triggered by rt_schedule_nhu().
  */
@@ -2038,7 +2038,7 @@ if_local_addr(ip_addr a, struct iface *i)
   return 0;
 }
 
-static u32 
+static u32
 rt_get_igp_metric(rte *rt)
 {
   eattr *ea = ea_find(rt->attrs->eattrs, EA_GEN_IGP_METRIC);
@@ -2073,7 +2073,7 @@ rt_update_hostentry(rtable *tab, struct hostentry *he)
   rta *old_src = he->src;
   int pxlen = 0;
 
-  /* Reset the hostentry */ 
+  /* Reset the hostentry */
   he->src = NULL;
   he->gw = IPA_NONE;
   he->dest = RTD_UNREACHABLE;
