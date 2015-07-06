@@ -10,13 +10,25 @@
 #define GUID_LENGTH 39
 #define MIB_IPROTO_BIRD 11001
 
+static void *list_iter;
+#define LIST_LENGTH(list, T, length) \
+  list_iter = (void *)list; \
+  length = 0; \
+  while (list_iter) \
+  { \
+    length += 1; \
+    list_iter = (void *)(((T)list_iter)->Next); \
+  };
+
 void die(const char *msg, ...) __attribute__((noreturn));
 
 LPVOID wmalloc(ULONG size)
 {
   void *p = malloc(size);
   if (p)
+  {
     return p;
+  }
   die("Unable to allocate %d bytes of memory", size);
 }
 
@@ -24,9 +36,54 @@ LPVOID wrealloc(void *ptr, ULONG size)
 {
   void *p = realloc(ptr, size);
   if (p)
+  {
     return p;
+  }
   die("Unable to allocate %d bytes of memory", size);
 }
+
+static char* get_error_msg(DWORD retval)
+{
+  DWORD code = (retval == 0) ? GetLastError() : retval;
+  LPSTR buffer = NULL;
+  size_t size = 0;
+
+  if (code == 0)
+  {
+    size = 16;
+    buffer = "No error message";
+  }
+  else
+  {
+    size = FormatMessageA(
+      FORMAT_MESSAGE_ALLOCATE_BUFFER |
+      FORMAT_MESSAGE_FROM_SYSTEM |
+      FORMAT_MESSAGE_IGNORE_INSERTS,
+      NULL, code,
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&buffer, 0, NULL);
+  }
+
+  char *msg = wmalloc(size + 1);
+  memset(msg, 0, size + 1);
+  memcpy(msg, buffer, size);
+
+  LocalFree(buffer);
+
+  return msg;
+}
+
+static wlog(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap, format);
+  vfprintf(stderr, format, ap);
+  va_end(ap);
+}
+
+#define log_winapi_error(fc_name, retval) \
+  char *msg = get_error_msg(retval); \
+  wlog(fc_name " failed (0x%x). %s", retval, msg); \
+  free(msg);
 
 PSTR narrow_wstr(PCWSTR wstr)
 {
@@ -34,34 +91,6 @@ PSTR narrow_wstr(PCWSTR wstr)
   PSTR str = (PSTR)wmalloc(length);
   WideCharToMultiByte(CP_UTF8, 0, wstr, -1, str, length, NULL, NULL);
   return str;
-}
-
-int addr_list_length(IP_ADAPTER_UNICAST_ADDRESS *address)
-{
-  IP_ADAPTER_UNICAST_ADDRESS *addr = address;
-  int count = 0;
-
-  while (addr)
-  {
-    count += 1;
-    addr = (IP_ADAPTER_UNICAST_ADDRESS *)addr->Next;
-  }
-
-  return count;
-}
-
-int addrs_count(IP_ADAPTER_ADDRESSES *adapter)
-{
-  int count = 0;
-
-  count += addr_list_length(
-    (IP_ADAPTER_UNICAST_ADDRESS *)adapter->FirstUnicastAddress);
-  //count += addr_list_length(
-  //  (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstMulticastAddress);
-  //count += addr_list_length(
-  //  (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstAnycastAddress);
-
-  return count;
 }
 
 void get_addrs(IP_ADAPTER_UNICAST_ADDRESS *address, struct wiface *wiface,
@@ -100,66 +129,57 @@ static enum wiftype convert_access_type(NET_IF_ACCESS_TYPE access_type)
 
 struct wiface* win_if_scan(int ipv, int *cnt)
 {
-  printf("win_if_scan called\n");
-
+  DWORD retval;
   ULONG size = 15000;
-  DWORD retval = ERROR_SUCCESS;
-  ULONG family = AF_INET;
-  if (ipv == 6)
-    family = AF_INET6;
+  ULONG family = (ipv == 6) ? AF_INET6 : AF_INET;
+  IP_ADAPTER_ADDRESSES *adapters = wmalloc(size);
 
-  IP_ADAPTER_ADDRESSES *adapter, *adapters;
   MIB_IF_ROW2 adapter_details;
-  struct wiface *wifaces;
-  int i, adapt_cnt, addr_idx;
+  int adapt_cnt, addr_idx;
 
-  adapters = wmalloc(size);
-
-  retval = GetAdaptersAddresses(AF_INET,
+retry:
+  retval = GetAdaptersAddresses(family,
     GAA_FLAG_INCLUDE_PREFIX |
     GAA_FLAG_SKIP_DNS_SERVER,
     NULL,
     adapters,
     &size);
-  if (retval != ERROR_SUCCESS)
+
+  if (retval == ERROR_BUFFER_OVERFLOW)
   {
-    printf("GetAdaptersAddresses failed (0x%x)\n", retval);
-    return;
+    goto retry;
+  }
+  else if (retval != ERROR_SUCCESS)
+  {
+    log_winapi_error("GetAdaptersAddresses", retval);
+    return NULL;
   }
 
-  adapter = adapters;
-  adapt_cnt = 0;
-  while (adapter)
-  {
-    adapt_cnt += 1;
-    adapter = adapter->Next;
-  }
+  LIST_LENGTH(adapters, IP_ADAPTER_ADDRESSES*, adapt_cnt);
 
-  wifaces = wmalloc(adapt_cnt * sizeof(struct wiface));
-  adapter = adapters;
-  i = 0;
+  struct wiface *wifaces = wmalloc(adapt_cnt * sizeof(struct wiface));
+  IP_ADAPTER_ADDRESSES *adapter = adapters;
+  int idx = 0;
   while (adapter)
   {
-    wifaces[i].flags = 0;
-    wifaces[i].name = strdup(adapter->AdapterName);
-    wifaces[i].luid = adapter->Luid.Value;
-    printf("GetAdaptersAddresses LUID: 0x%llx\n", adapter->Luid.Value);
-    printf("luid Reserved: %u\n", adapter->Luid.Info.Reserved);
-    printf("luid NetLuidIndex: %u\n", adapter->Luid.Info.NetLuidIndex);
-    printf("luid IfType: %u\n", adapter->Luid.Info.IfType);
-    wifaces[i].index = adapter->IfIndex;
-    wifaces[i].mtu = adapter->Mtu;
+    wifaces[idx].flags = 0;
+    wifaces[idx].name = strdup(adapter->AdapterName);
+    wifaces[idx].luid = adapter->Luid.Value;
+    wifaces[idx].index = adapter->IfIndex;
+    wifaces[idx].mtu = adapter->Mtu;
 
     if (adapter->OperStatus != 1)
     {
-      wifaces[i].up = 0;
-      wifaces[i].addrs_cnt = 0;
+      wifaces[idx].up = 0;
+      wifaces[idx].addrs_cnt = 0;
       goto loopend;
     }
 
-    wifaces[i].up = 1;
-    wifaces[i].addrs_cnt = addrs_count(adapter);
-    wifaces[i].addrs = wmalloc(wifaces[i].addrs_cnt * sizeof(struct wifa));
+    wifaces[idx].up = 1;
+    LIST_LENGTH(adapter->FirstUnicastAddress,
+      IP_ADAPTER_UNICAST_ADDRESS *,
+      wifaces[idx].addrs_cnt);
+    wifaces[idx].addrs = wmalloc(wifaces[idx].addrs_cnt * sizeof(struct wifa));
 
     addr_idx = 0;
 
@@ -167,23 +187,23 @@ struct wiface* win_if_scan(int ipv, int *cnt)
     {
       get_addrs(
         (IP_ADAPTER_UNICAST_ADDRESS *)adapter->FirstUnicastAddress,
-        &wifaces[i], &addr_idx);
+        &wifaces[idx], &addr_idx);
     }
 
     //if (adapter->FirstMulticastAddress)
     //{
     //  get_addrs(
     //    (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstMulticastAddress,
-    //    &wifaces[i], &addr_idx);
-    //  wifaces[i].flags |= W_IF_MULTICAST;
+    //    &wifaces[idx], &addr_idx);
+    //  wifaces[idx].flags |= W_IF_MULTICAST;
     //}
     //
     //if (adapter->FirstAnycastAddress)
     //{
     //  get_addrs(
     //    (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstAnycastAddress,
-    //    &wifaces[i], &addr_idx);
-    //  wifaces[i].flags |= W_IF_MULTICAST;
+    //    &wifaces[idx], &addr_idx);
+    //  wifaces[idx].flags |= W_IF_MULTICAST;
     //}
 
 loopend:
@@ -192,12 +212,12 @@ loopend:
     retval = GetIfEntry2(&adapter_details);
     if (retval != ERROR_SUCCESS)
     {
-      printf("GetIfEntry2 failed failed (0x%x)\n", retval);
+      log_winapi_error("GetIfEntry2", retval);
     }
 
-    wifaces[i].type = convert_access_type(adapter_details.AccessType);
+    wifaces[idx].type = convert_access_type(adapter_details.AccessType);
 
-    i += 1;
+    idx += 1;
     adapter = adapter->Next;
   }
 
@@ -251,14 +271,8 @@ char luidstr[256];
 
 struct wrtentry* win_rt_scan(int ipv, int *cnt)
 {
-  printf("win_rt_scan called\n");
-  ADDRESS_FAMILY family = AF_INET;
-  if (ipv == 6)
-  {
-    family = AF_INET6;
-  }
-
   DWORD retval;
+  ADDRESS_FAMILY family = (ipv == 6) ? AF_INET6 : AF_INET;
   struct wrtentry *rt_entries;
   MIB_IPFORWARD_TABLE2 *routes = NULL;
   MIB_IPFORWARD_ROW2 *route;
@@ -266,13 +280,12 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   retval = GetIpForwardTable2(family, &routes);
   if (retval != ERROR_SUCCESS)
   {
-    printf("GetIpForwardTable2 failed (0x%x)\n", retval);
+    log_winapi_error("GetIpForwardTable2", retval);
     return;
   }
 
   *cnt = routes->NumEntries;
   rt_entries = (struct wrtentry *)wmalloc(*cnt * sizeof(struct wrtentry));
-  printf("Routes count %d\n", *cnt);
 
   int idx, real_count = 0;
   for (idx = 0; idx < *cnt; idx++)
@@ -287,15 +300,6 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
       continue;
     }
 
-    printf("GetIpForwardTable2 LUID: %lx\n", route->InterfaceLuid.Value);
-    printf("luid Reserved: %u, NetLuidIndex: %u, IfType: %u\n",
-      route->InterfaceLuid.Info.Reserved,
-      route->InterfaceLuid.Info.NetLuidIndex,
-      route->InterfaceLuid.Info.IfType);
-    printf("Route origin %lu\n", route->Origin);
-    printf("Route loopback %lu\n", route->Loopback);
-    printf("Route protocol %lu\n", route->Protocol);
-
     rt_entries[real_count].luid = route->InterfaceLuid.Value;
     rt_entries[real_count].src = convert_proto_type(route->Protocol);
     rt_entries[real_count].metric = route->Metric;
@@ -308,12 +312,6 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
       rt_entries[real_count].next_hop = route->NextHop.Ipv4.sin_addr.S_un.S_addr;
       rt_entries[real_count].dst = route->DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr;
       rt_entries[real_count].pxlen = route->DestinationPrefix.PrefixLength;
-
-      printf("hop: (%lu) %s\n",
-        rt_entries[real_count].next_hop, inet_ntoa((route->NextHop.Ipv4.sin_addr)));
-      printf("prefix (%lu) : %s\n", rt_entries[real_count].dst,
-        inet_ntoa(route->DestinationPrefix.Prefix.Ipv4.sin_addr));
-      printf("pxlen: %lu\n", rt_entries[real_count].pxlen);
     }
 
     MIB_IPNET_ROW2 ipnet;
@@ -322,15 +320,12 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
     retval = GetIpNetEntry2(&ipnet);
     if (retval != ERROR_SUCCESS)
     {
-      printf("GetIpNetEntry2 failed (0x%x)\n", retval);
+      log_winapi_error("GetIpNetEntry2", retval);
     }
     else
     {
       // TODO: How about other states?
       rt_entries[real_count].is_unreachable = (ipnet.State == NlnsUnreachable);
-      printf("  State: %u\n", ipnet.State);
-      printf("  IsRouter: %u\n", ipnet.IsRouter);
-      printf("  IsUnreachable: %u\n", ipnet.IsUnreachable);
     }
 
     real_count += 1;
@@ -369,7 +364,7 @@ void win_rt_delete(struct wrtentry *entry, int ipv)
   int retval = DeleteIpForwardEntry2(&route);
   if (retval != ERROR_SUCCESS)
   {
-    printf("DeleteIpForwardEntry2 failed (0x%x)\n", retval);
+    log_winapi_error("DeleteIpForwardEntry2", retval);
   }
 }
 
@@ -389,6 +384,6 @@ void win_rt_create(struct wrtentry *entry, int ipv)
   retval = CreateIpForwardEntry2(&route);
   if (retval != ERROR_SUCCESS)
   {
-    printf("CreateIpForwardEntry2 failed (0x%x)\n", retval);
+    log_winapi_error("CreateIpForwardEntry2", retval);
   }
 }

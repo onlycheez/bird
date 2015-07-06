@@ -16,6 +16,8 @@
 #include "libwin/libwin.h"
 #include "libwin/wstructs.h"
 
+#define SKIP(ARG...) do { DBG("KRT: Ignoring route - " ARG); return; } while(0)
+
 void
 kif_sys_start(struct kif_proto *p UNUSED)
 {
@@ -78,13 +80,14 @@ static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
   ifa->iface = if_find_by_index(iface->index);
   if (!ifa->iface)
   {
-    printf("Received address message for unknown interface %d\n",
+    log(L_ERR "KIF: Received address message for unknown interface %d",
       iface->index);
+    return;
   }
 
   if (wifa->pxlen > BITS_PER_IP_ADDRESS)
   {
-    printf("KIF: Invalid prefix length for interface %s: %d\n",
+    log(L_ERR "KIF: Invalid prefix length for interface %s: %d\n",
       iface->name, wifa->pxlen);
     return;
   }
@@ -136,7 +139,7 @@ static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
   int scope = ipa_classify(ifa->ip);
   if (scope < 0)
   {
-    printf("Invalid interface address for %s\n", iface->name);
+    log(L_ERR "KIF: Invalid interface address %I for %s", ifa->ip, iface->name);
     return;
   }
   ifa->scope = scope & IADDR_SCOPE_MASK;
@@ -222,8 +225,7 @@ static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
   int c = ipa_classify_net(idst);
   if ((c < 0) || !(c & IADDR_HOST) || ((c & IADDR_SCOPE_MASK) <= SCOPE_LINK))
   {
-    printf("strange class/scope\n");
-    return;
+    SKIP("strange class/scope\n");
   }
 
   rte *re;
@@ -244,8 +246,7 @@ static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
   ra.iface = if_find_by_luid(entry->luid);
   if (!ra.iface)
   {
-    printf("wstruct_fill_rta: iface with luid %lx not found.\n", entry->luid);
-    return;
+    SKIP("iface with luid %lx not found", entry->luid);
   }
 
   if (entry->next_hop != 0)
@@ -257,15 +258,14 @@ static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
     neighbor *ng = neigh_find2(&p->p, &ra.gw, ra.iface, 0);
     if (!ng || (ng->scope == SCOPE_HOST))
     {
-      printf("KRT: Received route %lu/%d with strange next-hop %lu",
-          net->n.prefix, net->n.pxlen, ra.gw);
+      log(L_ERR "KRT: Received route %I/%d with strange next-hop %I",
+        net->n.prefix, net->n.pxlen, ra.gw);
       return;
     }
   }
   else
   {
     /* This is a host route or a loobpack route. */
-    printf("RTD_DEVICE\n");
     ra.dest = RTD_DEVICE;
   }
 
@@ -336,7 +336,7 @@ static void wstruct_init_wrtentry(struct wrtentry *entry, rte *re)
   }
   else
   {
-    printf("Unhandled destination type: %d\n", ra->dest);
+    DBG("Unhandled destination type: %d\n", ra->dest);
   }
 }
 
