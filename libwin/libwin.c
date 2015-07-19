@@ -81,9 +81,11 @@ static wlog(const char *format, ...)
 }
 
 #define log_winapi_error(fc_name, retval) \
-  char *msg = get_error_msg(retval); \
-  wlog(fc_name " failed (0x%x). %s", retval, msg); \
-  free(msg);
+  { \
+    char *msg = get_error_msg(retval); \
+    wlog(fc_name " failed (0x%x). %s", retval, msg); \
+    free(msg); \
+  }
 
 PSTR narrow_wstr(PCWSTR wstr)
 {

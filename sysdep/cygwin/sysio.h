@@ -6,6 +6,8 @@
  *	Can be freely distributed and used under the terms of the GNU GPL.
  */
 
+#include <netinet/in_systm.h> // Workaround for some BSDs
+#include <netinet/ip.h>
 
 #ifndef HAVE_STRUCT_IP_MREQN
 /* Several versions of glibc don't define this structure, so we have to do it ourselves */
@@ -174,6 +176,27 @@ sk_prepare_cmsgs4(sock *s, struct msghdr *msg, void *cbuf, size_t cbuflen)
   msg->msg_controllen = controllen;
 }
 
+static void
+sk_prepare_ip_header(sock *s, void *hdr, int dlen)
+{
+  struct ip *ip = hdr;
+
+  bzero(ip, 20);
+
+  ip->ip_v = 4;
+  ip->ip_hl = 5;
+  ip->ip_tos = (s->tos < 0) ? 0 : s->tos;
+  ip->ip_len = 20 + dlen;
+  ip->ip_ttl = (s->ttl < 0) ? 64 : s->ttl;
+  ip->ip_p = s->dport;
+  ip->ip_src = ipa_to_in4(s->saddr);
+  ip->ip_dst = ipa_to_in4(s->daddr);
+
+#ifdef __OpenBSD__
+  /* OpenBSD expects ip_len in network order, other BSDs expect host order */
+  ip->ip_len = htons(ip->ip_len);
+#endif
+}
 
 /*
  *	Miscellaneous Linux socket syscalls
@@ -259,14 +282,11 @@ sk_disable_mtu_disc6(sock *s)
   return 0;
 }
 
-int sk_priority_control = 7;
+int sk_priority_control = -1;
 
 static inline int
 sk_set_priority(sock *s, int prio)
 {
-  if (setsockopt(s->fd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio)) < 0)
-    ERR("SO_PRIORITY");
-
-  return 0;
+  ERR_MSG("Socket priority not supported");
 }
 
