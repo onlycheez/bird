@@ -24,8 +24,19 @@ enum wdst {
   W_DST_UNREACHABLE
 };
 
+struct ipv6 {
+  unsigned char bytes[16];
+} ipv6;
+
+struct wip {
+  union {
+    unsigned long ipv4;
+    struct ipv6 ipv6;
+  } u;
+};
+
 struct wifa {
-  unsigned long addr;
+  struct wip addr;
   unsigned long pxlen;
 };
 
@@ -44,8 +55,8 @@ struct wiface {
 struct wrtentry {
   unsigned long long luid;
   enum wkrtsrc src;
-  unsigned next_hop;
-  unsigned dst;
+  struct wip next_hop;
+  struct wip dst;
   unsigned long pxlen;
   unsigned long metric;
   unsigned long proto_id;

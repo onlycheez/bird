@@ -73,6 +73,44 @@ static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
   init_list(&iface->neighbors);
 }
 
+/**
+ * Assigns value of struct wip to ip_addr. Handles IP versions.
+ * Result is Little Endian.
+ */
+static void assign_to_ip_addr(ip_addr *dst, struct wip *src)
+{
+#ifdef IPV6
+  *dst = IPA_NONE;
+  int i;
+  for (i = 0; i < 16; i++)
+  {
+    dst->addr[i / 4] |= src->u.ipv6.bytes[i] << ((3 - (i % 4)) * 8);
+  }
+#else
+  *dst = src->u.ipv4;
+  ipa_ntoh(*dst);
+#endif
+}
+
+/**
+ * Assigns value of ip_addr to struct wip. Handles IP versions.
+ * Result is Big Endian.
+ */
+static void assign_from_ip_addr(struct wip *dst, ip_addr *src)
+{
+#ifdef IPV6
+  int i, j;
+  for (i = 0; i < 16; i++)
+  {
+    j = i / 4;
+    dst->u.ipv6.bytes[i] = src->addr[j] >> (24 - ((i % 4) * 8));
+  }
+#else
+  dst->u.ipv4 = *src;
+  ipa_hton(dst->u.ipv4);
+#endif
+}
+
 static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
   struct ifa *ifa)
 {
@@ -93,13 +131,12 @@ static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
   }
 
   ifa->pxlen = wifa->pxlen;
-  ifa->ip = (ip_addr)wifa->addr;
-  ipa_ntoh(ifa->ip);
+  assign_to_ip_addr(&ifa->ip, &wifa->addr);
 
   if (wifa->pxlen == BITS_PER_IP_ADDRESS)
   {
-    ip_addr addr = (ip_addr)wifa->addr;
-    ipa_ntoh(addr);
+    ip_addr addr;
+    assign_to_ip_addr(&addr, &wifa->addr);
     ifa->prefix = ifa->brd = addr;
 
     /* It is either a host address or a peer address */
@@ -154,7 +191,7 @@ kif_do_scan(struct kif_proto *p UNUSED)
   int cnt, i, j;
 
 #ifdef IPV6
-  wifaces = win_if_scan(6, &cnt)
+  wifaces = win_if_scan(6, &cnt);
 #else
   wifaces = win_if_scan(4, &cnt);
 #endif
@@ -217,10 +254,8 @@ static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
   // TODO: Check whether Windows supports multipath.
 
   ip_addr idst, igw;
-  idst = entry->dst;
-  ipa_ntoh(idst);
-  igw = entry->next_hop;
-  ipa_ntoh(igw);
+  assign_to_ip_addr(&idst, &entry->dst);
+  assign_to_ip_addr(&igw, &entry->next_hop);
 
   int c = ipa_classify_net(idst);
   if ((c < 0) || !(c & IADDR_HOST) || ((c & IADDR_SCOPE_MASK) <= SCOPE_LINK))
@@ -249,7 +284,7 @@ static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
     SKIP("iface with luid %lx not found", entry->luid);
   }
 
-  if (entry->next_hop != 0)
+  if (ipa_nonzero2(igw))
   {
     /* There is some gateway in the way. */
     ra.dest = RTD_ROUTER;
@@ -314,24 +349,23 @@ static void wstruct_init_wrtentry(struct wrtentry *entry, rte *re)
 
   if (ra->dest == RTD_ROUTER)
   {
-    entry->dst = net->n.prefix;
-    ipa_hton(entry->dst);
-    entry->next_hop = ra->gw;
-    ipa_hton(entry->next_hop);
+    assign_from_ip_addr(&entry->dst, &net->n.prefix);
+    assign_from_ip_addr(&entry->next_hop, &ra->gw);
     entry->pxlen = net->n.pxlen;
   }
   else if (ra->dest == RTD_DEVICE)
   {
-    entry->next_hop = 0;
-    entry->dst = net->n.prefix;
-    ipa_hton(entry->dst);
+    //TODO assign to ipv6
+    entry->next_hop.u.ipv4 = 0;
+    assign_from_ip_addr(&entry->dst, &net->n.prefix);
     entry->pxlen = net->n.pxlen;
   }
   else if (ra->dest == RTD_BLACKHOLE)
   {
     /* Windows doesn't support blackhole so invalid ip is used instead. */
-    entry->dst = 0;
-    entry->next_hop = 0;
+    //TODO
+    //entry->dst = 0;
+    //entry->next_hop = 0;
     entry->pxlen = MAX_PREFIX_LENGTH;
   }
   else

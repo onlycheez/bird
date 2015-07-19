@@ -99,7 +99,8 @@ static wlog(const char *format, ...)
 /**
  * Adds ip addresses to struct wiface.
  */
-void get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address, struct wiface *wiface)
+static void get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address,
+  struct wiface *wiface, int ipv)
 {
   if (!address)
   {
@@ -114,14 +115,32 @@ void get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address, struct wiface *wifac
   SOCKADDR *sockaddr;
   int idx = 0;
 
-  while (addr)
+  if (ipv == 6)
   {
-    sockaddr = addr->Address.lpSockaddr;
-    wiface->addrs[idx].addr =
-      ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
-    wiface->addrs[idx].pxlen = addr->OnLinkPrefixLength;
-    addr = addr->Next;
-    idx += 1;
+    while (addr)
+    {
+      sockaddr = addr->Address.lpSockaddr;
+      memcpy(
+        wiface->addrs[idx].addr.u.ipv6.bytes,
+        ((struct sockaddr_in6 *)sockaddr)->sin6_addr.u.Byte,
+        16);
+
+      wiface->addrs[idx].pxlen = addr->OnLinkPrefixLength;
+      addr = addr->Next;
+      idx += 1;
+    }
+  }
+  else
+  {
+    while (addr)
+    {
+      sockaddr = addr->Address.lpSockaddr;
+      wiface->addrs[idx].addr.u.ipv4 =
+        ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
+      wiface->addrs[idx].pxlen = addr->OnLinkPrefixLength;
+      addr = addr->Next;
+      idx += 1;
+    }
   }
 }
 
@@ -157,12 +176,14 @@ struct wiface* win_if_scan(int ipv, int *cnt)
   ULONG family = FAMILY_FROM_IPV(ipv);
   IP_ADAPTER_ADDRESSES *adapters = wmalloc(size);
   MIB_IF_ROW2 adapter_details;
-  int adapt_cnt;
 
 retry:
   retval = GetAdaptersAddresses(
     family,
     GAA_FLAG_INCLUDE_PREFIX |
+    GAA_FLAG_SKIP_ANYCAST |
+    GAA_FLAG_SKIP_MULTICAST |
+    GAA_FLAG_SKIP_FRIENDLY_NAME |
     GAA_FLAG_SKIP_DNS_SERVER,
     NULL,
     adapters,
@@ -178,14 +199,20 @@ retry:
     return NULL;
   }
 
-  LIST_LENGTH(adapters, IP_ADAPTER_ADDRESSES*, adapt_cnt);
+  int length;
+  LIST_LENGTH(adapters, IP_ADAPTER_ADDRESSES*, length);
 
-  struct wiface *wifaces = wmalloc(adapt_cnt * sizeof(struct wiface));
+  struct wiface *wifaces = wmalloc(length * sizeof(struct wiface));
   IP_ADAPTER_ADDRESSES *adapter;
-  int idx;
+  int idx = 0;
 
-  for (adapter = adapters, idx = 0; adapter; adapter = adapter->Next, idx++)
+  for (adapter = adapters; adapter; adapter = adapter->Next)
   {
+    if (adapter->TunnelType != TUNNEL_TYPE_NONE)
+    {
+      continue;
+    }
+
     wifaces[idx].flags = 0;
     wifaces[idx].name = strdup(adapter->AdapterName);
     wifaces[idx].luid = adapter->Luid.Value;
@@ -195,7 +222,7 @@ retry:
     if (adapter->OperStatus == 1)
     {
       wifaces[idx].up = 1;
-      get_adapter_addrs(adapter->FirstUnicastAddress, wifaces + idx);
+      get_adapter_addrs(adapter->FirstUnicastAddress, wifaces + idx, ipv);
     }
     else
     {
@@ -212,9 +239,10 @@ retry:
     }
 
     wifaces[idx].type = convert_access_type(adapter_details.AccessType);
+    idx += 1;
   }
 
-  *cnt = adapt_cnt;
+  *cnt = idx;
   free(adapters);
 
   return wifaces;
@@ -309,8 +337,10 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
     }
     else
     {
-      rt_entries[real_count].next_hop = route->NextHop.Ipv4.sin_addr.S_un.S_addr;
-      rt_entries[real_count].dst = route->DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr;
+      rt_entries[real_count].next_hop.u.ipv4 =
+        route->NextHop.Ipv4.sin_addr.S_un.S_addr;
+      rt_entries[real_count].dst.u.ipv4 =
+        route->DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr;
       rt_entries[real_count].pxlen = route->DestinationPrefix.PrefixLength;
     }
 
@@ -343,18 +373,29 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
 static ip_forward_entry_set_addresses(MIB_IPFORWARD_ROW2 *route,
   struct wrtentry *entry, int ipv)
 {
+  route->DestinationPrefix.PrefixLength = entry->pxlen;
+
   if (ipv == 6)
   {
+    route->DestinationPrefix.Prefix.Ipv6.sin6_family = AF_INET6;
+    memcpy(
+      route->DestinationPrefix.Prefix.Ipv6.sin6_addr.u.Byte,
+      entry->dst.u.ipv6.bytes,
+      16);
 
+    route->DestinationPrefix.Prefix.Ipv6.sin6_family = AF_INET6;
+    memcpy(
+      route->NextHop.Ipv6.sin6_addr.u.Byte,
+      entry->next_hop.u.ipv6.bytes,
+      16);
   }
   else
   {
-    route->DestinationPrefix.PrefixLength = entry->pxlen;
     route->DestinationPrefix.Prefix.Ipv4.sin_family = AF_INET;
-    route->DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr = entry->dst;
+    route->DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr = entry->dst.u.ipv4;
 
     route->NextHop.Ipv4.sin_family = AF_INET;
-    route->NextHop.Ipv4.sin_addr.S_un.S_addr = entry->next_hop;
+    route->NextHop.Ipv4.sin_addr.S_un.S_addr = entry->next_hop.u.ipv4;
   }
 }
 
