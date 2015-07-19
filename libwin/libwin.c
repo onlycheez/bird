@@ -10,7 +10,12 @@
 #define GUID_LENGTH 39
 #define MIB_IPROTO_BIRD 11001
 
+#define FAMILY_FROM_IPV(version) ((version == 6) ? AF_INET6 : AF_INET)
+
+/* Must not be used directly but by following #define only. */
 static void *list_iter;
+
+/* Return length of Windows linked list structures with 'Next' member. */
 #define LIST_LENGTH(list, T, length) \
   list_iter = (void *)list; \
   length = 0; \
@@ -59,8 +64,12 @@ static char* get_error_msg(DWORD retval)
       FORMAT_MESSAGE_ALLOCATE_BUFFER |
       FORMAT_MESSAGE_FROM_SYSTEM |
       FORMAT_MESSAGE_IGNORE_INSERTS,
-      NULL, code,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&buffer, 0, NULL);
+      NULL,
+      code,
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+      (LPSTR)&buffer,
+      0,
+      NULL);
   }
 
   char *msg = wmalloc(size + 1);
@@ -87,30 +96,39 @@ static wlog(const char *format, ...)
     free(msg); \
   }
 
-PSTR narrow_wstr(PCWSTR wstr)
+/**
+ * Adds ip addresses to struct wiface.
+ */
+void get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address, struct wiface *wiface)
 {
-  int length = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
-  PSTR str = (PSTR)wmalloc(length);
-  WideCharToMultiByte(CP_UTF8, 0, wstr, -1, str, length, NULL, NULL);
-  return str;
-}
+  if (!address)
+  {
+    wiface->addrs_cnt = 0;
+    return;
+  }
 
-void get_addrs(IP_ADAPTER_UNICAST_ADDRESS *address, struct wiface *wiface,
-  int *idx)
-{
+  LIST_LENGTH(address, IP_ADAPTER_UNICAST_ADDRESS *, wiface->addrs_cnt);
+  wiface->addrs = wmalloc(wiface->addrs_cnt * sizeof(struct wifa));
+
   IP_ADAPTER_UNICAST_ADDRESS *addr = address;
+  SOCKADDR *sockaddr;
+  int idx = 0;
 
   while (addr)
   {
-    SOCKADDR *sockaddr = addr->Address.lpSockaddr;
-    wiface->addrs[*idx].addr =
+    sockaddr = addr->Address.lpSockaddr;
+    wiface->addrs[idx].addr =
       ((struct sockaddr_in *)sockaddr)->sin_addr.S_un.S_addr;
-    wiface->addrs[*idx].pxlen = addr->OnLinkPrefixLength;
+    wiface->addrs[idx].pxlen = addr->OnLinkPrefixLength;
     addr = addr->Next;
-    *idx += 1;
+    idx += 1;
   }
 }
 
+/**
+ * Converts Windows kernel access enum type to windows-bird compatibility
+ * type.
+ */
 static enum wiftype convert_access_type(NET_IF_ACCESS_TYPE access_type)
 {
   switch (access_type)
@@ -129,18 +147,21 @@ static enum wiftype convert_access_type(NET_IF_ACCESS_TYPE access_type)
   }
 }
 
+/**
+ * Returns array of structures representing network interfaces.
+ */
 struct wiface* win_if_scan(int ipv, int *cnt)
 {
   DWORD retval;
   ULONG size = 15000;
-  ULONG family = (ipv == 6) ? AF_INET6 : AF_INET;
+  ULONG family = FAMILY_FROM_IPV(ipv);
   IP_ADAPTER_ADDRESSES *adapters = wmalloc(size);
-
   MIB_IF_ROW2 adapter_details;
-  int adapt_cnt, addr_idx;
+  int adapt_cnt;
 
 retry:
-  retval = GetAdaptersAddresses(family,
+  retval = GetAdaptersAddresses(
+    family,
     GAA_FLAG_INCLUDE_PREFIX |
     GAA_FLAG_SKIP_DNS_SERVER,
     NULL,
@@ -160,9 +181,10 @@ retry:
   LIST_LENGTH(adapters, IP_ADAPTER_ADDRESSES*, adapt_cnt);
 
   struct wiface *wifaces = wmalloc(adapt_cnt * sizeof(struct wiface));
-  IP_ADAPTER_ADDRESSES *adapter = adapters;
-  int idx = 0;
-  while (adapter)
+  IP_ADAPTER_ADDRESSES *adapter;
+  int idx;
+
+  for (adapter = adapters, idx = 0; adapter; adapter = adapter->Next, idx++)
   {
     wifaces[idx].flags = 0;
     wifaces[idx].name = strdup(adapter->AdapterName);
@@ -170,45 +192,17 @@ retry:
     wifaces[idx].index = adapter->IfIndex;
     wifaces[idx].mtu = adapter->Mtu;
 
-    if (adapter->OperStatus != 1)
+    if (adapter->OperStatus == 1)
+    {
+      wifaces[idx].up = 1;
+      get_adapter_addrs(adapter->FirstUnicastAddress, wifaces + idx);
+    }
+    else
     {
       wifaces[idx].up = 0;
       wifaces[idx].addrs_cnt = 0;
-      goto loopend;
     }
 
-    wifaces[idx].up = 1;
-    LIST_LENGTH(adapter->FirstUnicastAddress,
-      IP_ADAPTER_UNICAST_ADDRESS *,
-      wifaces[idx].addrs_cnt);
-    wifaces[idx].addrs = wmalloc(wifaces[idx].addrs_cnt * sizeof(struct wifa));
-
-    addr_idx = 0;
-
-    if (adapter->FirstUnicastAddress)
-    {
-      get_addrs(
-        (IP_ADAPTER_UNICAST_ADDRESS *)adapter->FirstUnicastAddress,
-        &wifaces[idx], &addr_idx);
-    }
-
-    //if (adapter->FirstMulticastAddress)
-    //{
-    //  get_addrs(
-    //    (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstMulticastAddress,
-    //    &wifaces[idx], &addr_idx);
-    //  wifaces[idx].flags |= W_IF_MULTICAST;
-    //}
-    //
-    //if (adapter->FirstAnycastAddress)
-    //{
-    //  get_addrs(
-    //    (IP_ADAPTER_UNICAST_ADDRESS_LH *)adapter->FirstAnycastAddress,
-    //    &wifaces[idx], &addr_idx);
-    //  wifaces[idx].flags |= W_IF_MULTICAST;
-    //}
-
-loopend:
     adapter_details.InterfaceLuid.Value = 0;
     adapter_details.InterfaceIndex = adapter->IfIndex;
     retval = GetIfEntry2(&adapter_details);
@@ -218,9 +212,6 @@ loopend:
     }
 
     wifaces[idx].type = convert_access_type(adapter_details.AccessType);
-
-    idx += 1;
-    adapter = adapter->Next;
   }
 
   *cnt = adapt_cnt;
@@ -229,6 +220,10 @@ loopend:
   return wifaces;
 }
 
+/**
+ * Converts Windows kernel protocol enum type to windows-bird compatibility
+ * type.
+ */
 static enum wkrtsrc convert_proto_type(int winapi_proto_type)
 {
   // TODO: How should be KRT_SRC_KERNEL set?
@@ -249,6 +244,9 @@ static enum wkrtsrc convert_proto_type(int winapi_proto_type)
   }
 }
 
+/**
+ * Checks whether given interface type is valid (the one BIRD can deal with).
+ */
 static int is_iftype_valid(int iftype)
 {
   switch (iftype)
@@ -268,13 +266,13 @@ static int is_iftype_valid(int iftype)
   }
 }
 
-char ipstr[16];
-char luidstr[256];
-
+/**
+ * Returns array of structures representing routes found in kernel table.
+ */
 struct wrtentry* win_rt_scan(int ipv, int *cnt)
 {
   DWORD retval;
-  ADDRESS_FAMILY family = (ipv == 6) ? AF_INET6 : AF_INET;
+  ADDRESS_FAMILY family = FAMILY_FROM_IPV(ipv);
   struct wrtentry *rt_entries;
   MIB_IPFORWARD_TABLE2 *routes = NULL;
   MIB_IPFORWARD_ROW2 *route;
@@ -339,6 +337,9 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   return rt_entries;
 }
 
+/**
+ * Fill MIB_IPFORWARD_ROW2 strucuture with values from struct wrtentry.
+ */
 static ip_forward_entry_set_addresses(MIB_IPFORWARD_ROW2 *route,
   struct wrtentry *entry, int ipv)
 {
@@ -357,6 +358,9 @@ static ip_forward_entry_set_addresses(MIB_IPFORWARD_ROW2 *route,
   }
 }
 
+/**
+ * Delete route netry from kernel table.
+ */
 void win_rt_delete(struct wrtentry *entry, int ipv)
 {
   MIB_IPFORWARD_ROW2 route;
@@ -370,6 +374,9 @@ void win_rt_delete(struct wrtentry *entry, int ipv)
   }
 }
 
+/**
+ * Create route entry in kernel table.
+ */
 void win_rt_create(struct wrtentry *entry, int ipv)
 {
   int retval;
