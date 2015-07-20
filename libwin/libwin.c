@@ -254,7 +254,6 @@ retry:
  */
 static enum wkrtsrc convert_proto_type(int winapi_proto_type)
 {
-  // TODO: How should be KRT_SRC_KERNEL set?
   switch (winapi_proto_type)
   {
     case MIB_IPROTO_BIRD:
@@ -354,7 +353,6 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
     }
     else
     {
-      // TODO: How about other states?
       rt_entries[real_count].is_unreachable = (ipnet.State == NlnsUnreachable);
     }
 

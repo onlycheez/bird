@@ -46,7 +46,6 @@ static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
   iface->mtu = (unsigned)wif.mtu;
   iface->luid = wif.luid;
 
-  // TODO: Setting flags.
   switch (wif.type)
   {
     case W_IF_LOOPBACK:
@@ -155,22 +154,6 @@ static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
     ifa->brd = ipa_or(ifa->ip, ipa_not(netmask));
     if (wifa->pxlen == BITS_PER_IP_ADDRESS - 1)
       ifa->opposite = ipa_opposite_m1(ifa->ip);
-
-//#ifndef IPV6
-//    if (wif->pxlen == BITS_PER_IP_ADDRESS - 2)
-//      ifa->opposite = ipa_opposite_m2(ifa->ip);
-//
-//    if ((iface->flags & IF_BROADCAST) && a[IFA_BROADCAST])
-//      {
-//        ip_addr xbrd;
-//        memcpy(&xbrd, RTA_DATA(a[IFA_BROADCAST]), sizeof(xbrd));
-//        ipa_ntoh(xbrd);
-//        if (ipa_equal(xbrd, ifa.prefix) || ipa_equal(xbrd, ifa.brd))
-//          ifa.brd = xbrd;
-//        else if (ifi->flags & IF_TMP_DOWN) /* Complain only during the first scan */
-//          log(L_ERR "KIF: Invalid broadcast address %I for %s", xbrd, ifi->name);
-//      }
-//#endif
   }
 
   int scope = ipa_classify(ifa->ip);
@@ -211,7 +194,6 @@ kif_do_scan(struct kif_proto *p UNUSED)
 
     if_end_partial_update(&iface);
 
-    // TODO: Delete removed interfaces
     free(wifaces[i].name);
   }
 
@@ -233,7 +215,6 @@ krt_sys_shutdown(struct krt_proto *p UNUSED)
 
 static int alleged_route_source(enum wkrtsrc src)
 {
-  // TODO: When return RTPROT_BIRD?
   switch (src)
   {
     case W_KRT_SRC_BIRD:
@@ -251,8 +232,6 @@ static int alleged_route_source(enum wkrtsrc src)
 
 static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
 {
-  // TODO: Check whether Windows supports multipath.
-
   ip_addr idst, igw;
   assign_to_ip_addr(&idst, &entry->dst);
   assign_to_ip_addr(&igw, &entry->next_hop);
@@ -314,8 +293,6 @@ done:
   re->u.krt.metric = 0;
 
   krt_got_route(p, re);
-
-  // TODO: Maybe other rte members. See netlink.
 }
 
 void
@@ -355,17 +332,24 @@ static void wstruct_init_wrtentry(struct wrtentry *entry, rte *re)
   }
   else if (ra->dest == RTD_DEVICE)
   {
-    //TODO assign to ipv6
+#ifdef IPV6
+    bzero(entry->next_hop.u.ipv6.bytes, 16);
+#else
     entry->next_hop.u.ipv4 = 0;
+#endif
     assign_from_ip_addr(&entry->dst, &net->n.prefix);
     entry->pxlen = net->n.pxlen;
   }
   else if (ra->dest == RTD_BLACKHOLE)
   {
     /* Windows doesn't support blackhole so invalid ip is used instead. */
-    //TODO
-    //entry->dst = 0;
-    //entry->next_hop = 0;
+#ifdef IPV6
+    bzero(entry->dst.u.ipv6.bytes, 16);
+    bzero(entry->next_hop.u.ipv6.bytes, 16);
+#else
+    entry->dst.u.ipv4 = 0;
+    entry->next_hop.u.ipv4 = 0;
+#endif
     entry->pxlen = MAX_PREFIX_LENGTH;
   }
   else
