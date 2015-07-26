@@ -2,6 +2,11 @@
 #ifndef _WINDOWS_STRUCT_H_
 #define _WINDOWS_STRUCT_H_
 
+#include <stdint.h>
+
+/**
+ * Interface type
+ */
 enum wiftype {
   W_IF_UNKOWN = 0,
   W_IF_LOOPBACK,
@@ -10,6 +15,9 @@ enum wiftype {
   W_IF_BROADCAST
 };
 
+/**
+ * Route entry source
+ */
 enum wkrtsrc {
   W_KRT_SRC_UNKNOWN = 0,
   W_KRT_SRC_BIRD,
@@ -18,49 +26,61 @@ enum wkrtsrc {
   W_KRT_SRC_UNSPEC
 };
 
+/**
+ * Destination type
+ */
 enum wdst {
   W_DST_UNKOWN = 0,
   W_DST_ROUTER,
   W_DST_UNREACHABLE
 };
 
-struct ipv6 {
-  unsigned char bytes[16];
-} ipv6;
-
+/**
+ * IP address
+ */
 struct wip {
   union {
-    unsigned long ipv4;
-    struct ipv6 ipv6;
+    uint32_t ipv4;
+    struct {
+      unsigned char bytes[16];
+    } ipv6;
   } u;
 };
 
+/**
+ * Network interface address
+ */
 struct wifa {
   struct wip addr;
-  unsigned long pxlen;
+  uint32_t pxlen;
 };
 
+/**
+ * Netowrk interface
+ */
 struct wiface {
-  char *name;
-  unsigned long long luid;
-  unsigned flags;
+  char name[64];
+  uint64_t luid;
   enum wiftype type;
-  unsigned long mtu;
-  unsigned long index;
+  uint32_t mtu;
+  uint32_t index;
   struct wifa *addrs;
   int addrs_cnt;
-  int up;
+  char is_up;
 };
 
+/**
+ * Route entry
+ */
 struct wrtentry {
-  unsigned long long luid;
+  uint64_t luid;
   enum wkrtsrc src;
   struct wip next_hop;
   struct wip dst;
-  unsigned long pxlen;
+  uint32_t pxlen;
   unsigned long metric;
-  unsigned long proto_id;
-  int is_unreachable;
+  unsigned proto_id;
+  char is_unreachable;
 };
 
 #endif

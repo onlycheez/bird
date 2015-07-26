@@ -31,7 +31,7 @@ struct ifa {				/* Interface address */
 struct iface {
   node n;
 #ifdef BIRD_CYGWIN
-  char name[128];
+  char name[64];
 #else
   char name[32];
 #endif
@@ -42,7 +42,7 @@ struct iface {
   struct ifa *addr;			/* Primary address */
   list neighbors;			/* All neighbors on this interface */
 #ifdef BIRD_CYGWIN
-  unsigned long long luid;  /* Interface identifier on Windows */
+  uint64_t luid;  /* Interface identifier on Windows */
 #endif
 };
 

@@ -30,12 +30,6 @@ kif_sys_shutdown(struct kif_proto *p)
 
 }
 
-void wstruct_free(struct wiface *wiface)
-{
-  free(wiface->name);
-  free(wiface);
-}
-
 static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
 {
   bzero(iface, sizeof(struct iface));
@@ -62,7 +56,7 @@ static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
       iface->flags |= IF_MULTICAST;
   }
 
-  if (wif.up)
+  if (wif.is_up)
   {
     iface->flags |= IF_ADMIN_UP;
     iface->flags |= IF_LINK_UP;
@@ -193,8 +187,6 @@ kif_do_scan(struct kif_proto *p UNUSED)
     }
 
     if_end_partial_update(&iface);
-
-    free(wifaces[i].name);
   }
 
   free(wifaces);

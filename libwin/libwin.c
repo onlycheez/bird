@@ -213,20 +213,20 @@ retry:
       continue;
     }
 
-    wifaces[idx].flags = 0;
-    wifaces[idx].name = strdup(adapter->AdapterName);
+    memset(wifaces[idx].name, 0, 64);
+    memcpy(wifaces[idx].name, adapter->AdapterName, strlen(adapter->AdapterName));
     wifaces[idx].luid = adapter->Luid.Value;
     wifaces[idx].index = adapter->IfIndex;
     wifaces[idx].mtu = adapter->Mtu;
 
     if (adapter->OperStatus == 1)
     {
-      wifaces[idx].up = 1;
+      wifaces[idx].is_up = 1;
       get_adapter_addrs(adapter->FirstUnicastAddress, wifaces + idx, ipv);
     }
     else
     {
-      wifaces[idx].up = 0;
+      wifaces[idx].is_up = 0;
       wifaces[idx].addrs_cnt = 0;
     }
 
