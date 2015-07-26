@@ -293,6 +293,44 @@ static int is_iftype_valid(int iftype)
   }
 }
 
+static char is_route_valid(MIB_IPFORWARD_ROW2 *route, int ipv)
+{
+  if ((route->Protocol <= 1 || route->Protocol >= 14) &&
+      (!is_iftype_valid(route->InterfaceLuid.Info.IfType)))
+  {
+    return 0;
+  }
+
+  if (ipv == 6)
+  {
+    if (route->DestinationPrefix.PrefixLength > 128)
+    {
+      return 0;
+    }
+
+    char i;
+    for (i = 0; i < 8; i++)
+    {
+      if (route->NextHop.Ipv6.sin6_addr.u.Word[i] != 0)
+      {
+        return 1;
+      }
+    }
+
+    return 0;
+  }
+  else
+  {
+    if ((route->NextHop.Ipv4.sin_addr.S_un.S_addr == 0) ||
+        (route->DestinationPrefix.PrefixLength > 32))
+    {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
 /**
  * Returns array of structures representing routes found in kernel table.
  */
@@ -319,10 +357,7 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   {
     route = routes->Table + idx;
 
-    if (route->NextHop.Ipv4.sin_addr.S_un.S_addr == 0 || // IPV6
-        !is_iftype_valid(route->InterfaceLuid.Info.IfType) ||
-        route->DestinationPrefix.PrefixLength > 32 ||
-        !(route->Protocol >= 1 && route->Protocol <= 14))
+    if (!is_route_valid(route, ipv))
     {
       continue;
     }
@@ -333,6 +368,10 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
     rt_entries[real_count].proto_id = (int)route->Protocol;
     if (family == AF_INET6)
     {
+      memcpy(rt_entries[real_count].next_hop.u.ipv6.bytes,
+        route->NextHop.Ipv6.sin6_addr.u.Byte, 16);
+      memcpy(rt_entries[real_count].dst.u.ipv6.bytes,
+        route->DestinationPrefix.Prefix.Ipv6.sin6_addr.u.Byte, 16);
     }
     else
     {
@@ -340,8 +379,8 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
         route->NextHop.Ipv4.sin_addr.S_un.S_addr;
       rt_entries[real_count].dst.u.ipv4 =
         route->DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr;
-      rt_entries[real_count].pxlen = route->DestinationPrefix.PrefixLength;
     }
+    rt_entries[real_count].pxlen = route->DestinationPrefix.PrefixLength;
 
     MIB_IPNET_ROW2 ipnet;
     ipnet.InterfaceLuid = route->InterfaceLuid;
