@@ -47,7 +47,7 @@ struct fib_iterator {			/* See lib/slists.h for an explanation */
   byte efef;				/* 0xff to distinguish between iterator and node */
   byte pad[3];
   struct fib_node *node;		/* Or NULL if freshly merged */
-  unsigned int hash;
+  uint hash;
 };
 
 typedef void (*fib_init_func)(struct fib_node *);
@@ -56,11 +56,11 @@ struct fib {
   pool *fib_pool;			/* Pool holding all our data */
   slab *fib_slab;			/* Slab holding all fib nodes */
   struct fib_node **hash_table;		/* Node hash table */
-  unsigned int hash_size;		/* Number of hash table entries (a power of two) */
-  unsigned int hash_order;		/* Binary logarithm of hash_size */
-  unsigned int hash_shift;		/* 16 - hash_log */
-  unsigned int entries;			/* Number of entries */
-  unsigned int entries_min, entries_max;/* Entry count limits (else start rehashing) */
+  uint hash_size;			/* Number of hash table entries (a power of two) */
+  uint hash_order;			/* Binary logarithm of hash_size */
+  uint hash_shift;			/* 16 - hash_log */
+  uint entries;				/* Number of entries */
+  uint entries_min, entries_max;	/* Entry count limits (else start rehashing) */
   fib_init_func init;			/* Constructor */
 };
 
@@ -78,7 +78,7 @@ void fit_put(struct fib_iterator *, struct fib_node *);
 
 #define FIB_WALK(fib, z) do {					\
 	struct fib_node *z, **ff = (fib)->hash_table;		\
-	unsigned int count = (fib)->hash_size;			\
+	uint count = (fib)->hash_size;				\
 	while (count--)						\
 	  for(z = *ff++; z; z=z->next)
 
@@ -88,8 +88,8 @@ void fit_put(struct fib_iterator *, struct fib_node *);
 
 #define FIB_ITERATE_START(fib, it, z) do {			\
 	struct fib_node *z = fit_get(fib, it);			\
-	unsigned int count = (fib)->hash_size;			\
-	unsigned int hpos = (it)->hash;				\
+	uint count = (fib)->hash_size;				\
+	uint hpos = (it)->hash;					\
 	for(;;) {						\
 	  if (!z)						\
             {							\
@@ -240,6 +240,7 @@ static inline int rte_is_filtered(rte *r) { return !!(r->flags & REF_FILTERED); 
 #define RA_OPTIMAL	1		/* Announcement of optimal route change */
 #define RA_ACCEPTED	2		/* Announcement of first accepted route */
 #define RA_ANY		3		/* Announcement of any route change */
+#define RA_MERGED	4		/* Announcement of optimal route merged with next ones */
 
 /* Return value of import_control() callback */
 #define RIC_ACCEPT	1		/* Accepted by protocol */
@@ -263,12 +264,14 @@ void rte_update2(struct announce_hook *ah, net *net, rte *new, struct rte_src *s
 static inline void rte_update(struct proto *p, net *net, rte *new) { rte_update2(p->main_ahook, net, new, p->main_source); }
 void rte_discard(rtable *tab, rte *old);
 int rt_examine(rtable *t, ip_addr prefix, int pxlen, struct proto *p, struct filter *filter);
+rte *rt_export_merged(struct announce_hook *ah, net *net, rte **rt_free, struct ea_list **tmpa, int silent);
 void rt_refresh_begin(rtable *t, struct announce_hook *ah);
 void rt_refresh_end(rtable *t, struct announce_hook *ah);
 void rte_dump(rte *);
 void rte_free(rte *);
 rte *rte_do_cow(rte *);
 static inline rte * rte_cow(rte *r) { return (r->flags & REF_COW) ? rte_do_cow(r) : r; }
+rte *rte_cow_rta(rte *r, linpool *lp);
 void rt_dump(rtable *);
 void rt_dump_all(void);
 int rt_feed_baby(struct proto *p);
@@ -320,7 +323,7 @@ struct mpnh {
   ip_addr gw;				/* Next hop */
   struct iface *iface;			/* Outgoing interface */
   struct mpnh *next;
-  unsigned char weight;
+  byte weight;
 };
 
 struct rte_src {
@@ -388,6 +391,12 @@ typedef struct rta {
 #define IGP_METRIC_UNKNOWN 0x80000000	/* Default igp_metric used when no other
 					   protocol-specific metric is availabe */
 
+
+/* Route has regular, reachable nexthop (i.e. not RTD_UNREACHABLE and like) */
+static inline int rte_is_reachable(rte *r)
+{ uint d = r->attrs->dest; return (d == RTD_ROUTER) || (d == RTD_DEVICE) || (d == RTD_MULTIPATH); }
+
+
 /*
  *	Extended Route Attributes
  */
@@ -417,13 +426,15 @@ typedef struct eattr {
 
 #define EA_CODE_MASK 0xffff
 #define EA_ALLOW_UNDEF 0x10000		/* ea_find: allow EAF_TYPE_UNDEF */
+#define EA_BIT(n) ((n) << 24)		/* Used in bitfield accessors */
 
 #define EAF_TYPE_MASK 0x0f		/* Mask with this to get type */
-#define EAF_TYPE_INT 0x01		/* 32-bit signed integer number */
+#define EAF_TYPE_INT 0x01		/* 32-bit unsigned integer number */
 #define EAF_TYPE_OPAQUE 0x02		/* Opaque byte string (not filterable) */
 #define EAF_TYPE_IP_ADDRESS 0x04	/* IP address */
 #define EAF_TYPE_ROUTER_ID 0x05		/* Router ID (IPv4 address) */
 #define EAF_TYPE_AS_PATH 0x06		/* BGP AS path (encoding per RFC 1771:4.3) */
+#define EAF_TYPE_BITFIELD 0x09		/* 32-bit embedded bitfield */
 #define EAF_TYPE_INT_SET 0x0a		/* Set of u32's (e.g., a community list) */
 #define EAF_TYPE_EC_SET 0x0e		/* Set of pairs of u32's - ext. community list */
 #define EAF_TYPE_UNDEF 0x0f		/* `force undefined' entry */
@@ -433,7 +444,7 @@ typedef struct eattr {
 #define EAF_TEMP 0x80			/* A temporary attribute (the one stored in the tmp attr list) */
 
 struct adata {
-  unsigned int length;			/* Length of data */
+  uint length;				/* Length of data */
   byte data[0];
 };
 
@@ -459,20 +470,28 @@ static inline void rt_lock_source(struct rte_src *src) { src->uc++; }
 static inline void rt_unlock_source(struct rte_src *src) { src->uc--; }
 void rt_prune_sources(void);
 
+struct ea_walk_state {
+  ea_list *eattrs;			/* Ccurrent ea_list, initially set by caller */
+  eattr *ea;				/* Current eattr, initially NULL */
+  u32 visited[4];			/* Bitfield, limiting max to 128 */
+};
 
 eattr *ea_find(ea_list *, unsigned ea);
+eattr *ea_walk(struct ea_walk_state *s, uint id, uint max);
 int ea_get_int(ea_list *, unsigned ea, int def);
 void ea_dump(ea_list *);
 void ea_sort(ea_list *);		/* Sort entries in all sub-lists */
 unsigned ea_scan(ea_list *);		/* How many bytes do we need for merged ea_list */
 void ea_merge(ea_list *from, ea_list *to); /* Merge sub-lists to allocated buffer */
 int ea_same(ea_list *x, ea_list *y);	/* Test whether two ea_lists are identical */
-unsigned int ea_hash(ea_list *e);	/* Calculate 16-bit hash value */
+uint ea_hash(ea_list *e);	/* Calculate 16-bit hash value */
 ea_list *ea_append(ea_list *to, ea_list *what);
+void ea_format_bitfield(struct eattr *a, byte *buf, int bufsize, const char **names, int min, int max);
 
 int mpnh__same(struct mpnh *x, struct mpnh *y); /* Compare multipath nexthops */
 static inline int mpnh_same(struct mpnh *x, struct mpnh *y)
 { return (x == y) || mpnh__same(x, y); }
+struct mpnh *mpnh_merge(struct mpnh *x, struct mpnh *y, int rx, int ry, int max, linpool *lp);
 
 void rta_init(void);
 rta *rta_lookup(rta *);			/* Get rta equivalent to this one, uc++ */
@@ -480,6 +499,8 @@ static inline int rta_is_cached(rta *r) { return r->aflags & RTAF_CACHED; }
 static inline rta *rta_clone(rta *r) { r->uc++; return r; }
 void rta__free(rta *r);
 static inline void rta_free(rta *r) { if (r && !--r->uc) rta__free(r); }
+rta *rta_do_cow(rta *o, linpool *lp);
+static inline rta * rta_cow(rta *r, linpool *lp) { return rta_is_cached(r) ? rta_do_cow(r, lp) : r; }
 void rta_dump(rta *);
 void rta_dump_all(void);
 void rta_show(struct cli *, rta *, ea_list *);

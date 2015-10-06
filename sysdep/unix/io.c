@@ -991,8 +991,10 @@ sk_set_md5_auth(sock *s, ip_addr a, struct iface *ifa, char *passwd)
 int
 sk_set_ipv6_checksum(sock *s, int offset)
 {
+#ifndef BIRD_CYGWIN
   if (setsockopt(s->fd, SOL_IPV6, IPV6_CHECKSUM, &offset, sizeof(offset)) < 0)
     ERR("IPV6_CHECKSUM");
+#endif
 
   return 0;
 }

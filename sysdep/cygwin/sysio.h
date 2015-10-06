@@ -249,36 +249,20 @@ sk_set_min_ttl4(sock *s, int ttl)
 static inline int
 sk_set_min_ttl6(sock *s, int ttl)
 {
-  if (setsockopt(s->fd, SOL_IPV6, IPV6_MINHOPCOUNT, &ttl, sizeof(ttl)) < 0)
-  {
-    if (errno == ENOPROTOOPT)
-      ERR_MSG("Kernel does not support IPv6 TTL security");
-    else
-      ERR("IPV6_MINHOPCOUNT");
-  }
-
-  return 0;
+  ERR_MSG("Kernel does not support IPv6 TTL security");
 }
 
 static inline int
 sk_disable_mtu_disc4(sock *s)
 {
-  int dont = IP_PMTUDISC_DONT;
-
-  if (setsockopt(s->fd, SOL_IP, IP_MTU_DISCOVER, &dont, sizeof(dont)) < 0)
-    ERR("IP_MTU_DISCOVER");
-
+  /* TODO: Set IP_DONTFRAG to 0 ? */
   return 0;
 }
 
 static inline int
 sk_disable_mtu_disc6(sock *s)
 {
-  int dont = IPV6_PMTUDISC_DONT;
-
-  if (setsockopt(s->fd, SOL_IPV6, IPV6_MTU_DISCOVER, &dont, sizeof(dont)) < 0)
-    ERR("IPV6_MTU_DISCOVER");
-
+  /* TODO: Set IPV6_DONTFRAG to 0 ? */
   return 0;
 }
 
