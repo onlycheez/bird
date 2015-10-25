@@ -6,18 +6,9 @@
  *	Can be freely distributed and used under the terms of the GNU GPL.
  */
 
+#include <cygwin/in.h>
 #include <netinet/in_systm.h> // Workaround for some BSDs
 #include <netinet/ip.h>
-
-#ifndef HAVE_STRUCT_IP_MREQN
-/* Several versions of glibc don't define this structure, so we have to do it ourselves */
-struct ip_mreqn
-{
-  struct in_addr imr_multiaddr;			/* IP multicast address of group */
-  struct in_addr imr_address;			/* local IP address of interface */
-  int		 imr_ifindex;			/* Interface index */
-};
-#endif
 
 #ifndef IP_MINTTL
 #define IP_MINTTL 21
@@ -47,33 +38,34 @@ struct tcp_md5sig {
 
 #endif
 
-
-/* Linux does not care if sa_len is larger than needed */
+#ifdef IPV6
+#define SA_LEN(x) sizeof(struct sockaddr_in6)
+#else
 #define SA_LEN(x) sizeof(sockaddr)
-
+#endif
 
 /*
  *	Linux IPv4 multicast syscalls
  */
 
 #define INIT_MREQ4(maddr,ifa) \
-  { .imr_multiaddr = ipa_to_in4(maddr), .imr_ifindex = ifa->index }
+  { .imr_multiaddr = ipa_to_in4(maddr), .imr_interface = ipa_to_in4(ifa->addr->ip) }
 
 static inline int
 sk_setup_multicast4(sock *s)
 {
-  struct ip_mreqn mr = { .imr_ifindex = s->iface->index };
-  int ttl = s->ttl;
-  int n = 0;
+  int index = htonl(s->iface->index);
+  u8 ttl = s->ttl;
+  u8 n = 0;
 
   /* This defines where should we send _outgoing_ multicasts */
-  if (setsockopt(s->fd, SOL_IP, IP_MULTICAST_IF, &mr, sizeof(mr)) < 0)
+  if (setsockopt(s->fd, IPPROTO_IP, IP_MULTICAST_IF, &index, sizeof(index)) < 0)
     ERR("IP_MULTICAST_IF");
 
-  if (setsockopt(s->fd, SOL_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) < 0)
+  if (setsockopt(s->fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) < 0)
     ERR("IP_MULTICAST_TTL");
 
-  if (setsockopt(s->fd, SOL_IP, IP_MULTICAST_LOOP, &n, sizeof(n)) < 0)
+  if (setsockopt(s->fd, IPPROTO_IP, IP_MULTICAST_LOOP, &n, sizeof(n)) < 0)
     ERR("IP_MULTICAST_LOOP");
 
   return 0;
@@ -82,9 +74,9 @@ sk_setup_multicast4(sock *s)
 static inline int
 sk_join_group4(sock *s, ip_addr maddr)
 {
-  struct ip_mreqn mr = INIT_MREQ4(maddr, s->iface);
+  struct ip_mreq mr = INIT_MREQ4(maddr, s->iface);
 
-  if (setsockopt(s->fd, SOL_IP, IP_ADD_MEMBERSHIP, &mr, sizeof(mr)) < 0)
+  if (setsockopt(s->fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mr, sizeof(mr)) < 0)
     ERR("IP_ADD_MEMBERSHIP");
 
   return 0;
@@ -93,9 +85,9 @@ sk_join_group4(sock *s, ip_addr maddr)
 static inline int
 sk_leave_group4(sock *s, ip_addr maddr)
 {
-  struct ip_mreqn mr = INIT_MREQ4(maddr, s->iface);
+  struct ip_mreq mr = INIT_MREQ4(maddr, s->iface);
 
-  if (setsockopt(s->fd, SOL_IP, IP_DROP_MEMBERSHIP, &mr, sizeof(mr)) < 0)
+  if (setsockopt(s->fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mr, sizeof(mr)) < 0)
     ERR("IP_DROP_MEMBERSHIP");
 
   return 0;
@@ -116,7 +108,7 @@ sk_request_cmsg4_pktinfo(sock *s)
 {
   int y = 1;
 
-  if (setsockopt(s->fd, SOL_IP, IP_PKTINFO, &y, sizeof(y)) < 0)
+  if (setsockopt(s->fd, IPPROTO_IP, IP_PKTINFO, &y, sizeof(y)) < 0)
     ERR("IP_PKTINFO");
 
   return 0;
@@ -127,7 +119,7 @@ sk_request_cmsg4_ttl(sock *s)
 {
   int y = 1;
 
-  if (setsockopt(s->fd, SOL_IP, IP_RECVTTL, &y, sizeof(y)) < 0)
+  if (setsockopt(s->fd, IPPROTO_IP, IP_RECVTTL, &y, sizeof(y)) < 0)
     ERR("IP_RECVTTL");
 
   return 0;
@@ -169,8 +161,6 @@ sk_prepare_cmsgs4(sock *s, struct msghdr *msg, void *cbuf, size_t cbuflen)
 
   pi = (struct in_pktinfo *) CMSG_DATA(cm);
   pi->ipi_ifindex = s->iface ? s->iface->index : 0;
-//WIN pi->ipi_spec_dst = ipa_to_in4(s->saddr);
-//WIN struct in_pktinfo doesn't define ipi_spec_dst member
   pi->ipi_addr = ipa_to_in4(IPA_NONE);
 
   msg->msg_controllen = controllen;

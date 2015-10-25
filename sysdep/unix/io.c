@@ -23,13 +23,15 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <net/if.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include "sysdep/config.h"
 #ifdef BIRD_CYGWIN
 #include "lib/missing.h"
+#include <cygwin/in.h>
+#include <cygwin/in6.h>
 #else
+#include <netinet/in.h>
 #include <netinet/icmp6.h>
 #endif
 
