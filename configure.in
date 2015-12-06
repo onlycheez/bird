@@ -193,6 +193,7 @@ AC_MSG_RESULT($sysdep_dirs)
 AC_SUBST(sysdep_dirs)
 
 if test "$using_cygwin" = yes ; then
+	export CYGWIN="${CYGWIN} winsymlinks"
 	AC_DEFINE(BIRD_CYGWIN)
 	WIN_LIBS="../libwin/libwin.a -liphlpapi"
 	AC_SUBST(WIN_LIBS)
@@ -308,10 +309,6 @@ AC_CONFIG_FILES($makefiles)
 AC_OUTPUT
 
 rm -f $objdir/sysdep/paths.h
-
-if test "$using_cygwin" = yes ; then
-	$srcdir/tools/replacesymlinks "$srcdir"
-fi
 
 cat >&AC_FD_MSG <<EOF
 
