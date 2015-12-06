@@ -4,7 +4,7 @@
 objdir=@objdir@
 
 all depend tags install install-docs:
-	$(MAKE) -C libwin
+	$(MAKE) -C sysdep/cygwin/libwin
 	$(MAKE) -C $(objdir) $@
 
 docs userdocs progdocs:
@@ -18,4 +18,3 @@ distclean: clean
 	$(MAKE) -C doc distclean
 	rm -rf $(objdir) autom4te.cache
 	rm -f config.* configure sysdep/autoconf.h sysdep/paths.h Makefile
-
