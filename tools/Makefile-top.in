@@ -3,8 +3,14 @@
 
 objdir=@objdir@
 
+ifdef COMSPEC
+	MAKEWIN := $(MAKE) -C sysdep/cygwin/libwin
+else
+	MAKEWIN := echo ""
+endif
+
 all depend tags install install-docs:
-	$(MAKE) -C sysdep/cygwin/libwin
+	$(MAKEWIN)
 	$(MAKE) -C $(objdir) $@
 
 docs userdocs progdocs:
