@@ -1,4 +1,3 @@
-missing.h
 sysio.h
 krt-sys.h
 krt-win.c

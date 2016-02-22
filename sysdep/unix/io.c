@@ -26,12 +26,8 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include "sysdep/config.h"
-#ifdef BIRD_CYGWIN
-#include "lib/missing.h"
-#include <cygwin/in.h>
-#include <cygwin/in6.h>
-#else
 #include <netinet/in.h>
+#ifndef BIRD_CYGWIN
 #include <netinet/icmp6.h>
 #endif
 

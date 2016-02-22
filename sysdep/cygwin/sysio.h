@@ -6,37 +6,19 @@
  *	Can be freely distributed and used under the terms of the GNU GPL.
  */
 
-#include <cygwin/in.h>
-#include <netinet/in_systm.h> // Workaround for some BSDs
+#include <netinet/in.h>
 #include <netinet/ip.h>
 
-#ifndef IP_MINTTL
-#define IP_MINTTL 21
-#endif
+#define ICMP6_FILTER 1
+#define ICMP6_FILTER_SETBLOCKALL(filterp) \
+  memset (filterp, 0xFF, sizeof (struct icmp6_filter));
+#define ICMP6_FILTER_SETPASS(type, filterp) \
+  ((((filterp)->icmp6_filt[(type) >> 5]) &= ~(1 << ((type) & 31))))
 
-#ifndef IPV6_TCLASS
-#define IPV6_TCLASS 67
-#endif
-
-#ifndef IPV6_MINHOPCOUNT
-#define IPV6_MINHOPCOUNT 73
-#endif
-
-
-#ifndef TCP_MD5SIG
-
-#define TCP_MD5SIG  14
-#define TCP_MD5SIG_MAXKEYLEN 80
-
-struct tcp_md5sig {
-  struct  sockaddr_storage tcpm_addr;             /* address associated */
-  u16   __tcpm_pad1;                              /* zero */
-  u16   tcpm_keylen;                              /* key length */
-  u32   __tcpm_pad2;                              /* zero */
-  u8    tcpm_key[TCP_MD5SIG_MAXKEYLEN];           /* key (binary) */
+struct icmp6_filter
+{
+  uint32_t icmp6_filt[8];
 };
-
-#endif
 
 #ifdef IPV6
 #define SA_LEN(x) sizeof(struct sockaddr_in6)
@@ -45,7 +27,7 @@ struct tcp_md5sig {
 #endif
 
 /*
- *	Linux IPv4 multicast syscalls
+ *  Cygwin IPv4 multicast syscalls
  */
 
 #define INIT_MREQ4(maddr,ifa) \
@@ -93,13 +75,6 @@ sk_leave_group4(sock *s, ip_addr maddr)
   return 0;
 }
 
-
-/*
- *	Linux IPv4 packet control messages
- */
-
-/* Mostly similar to standardized IPv6 code */
-
 #define CMSG4_SPACE_PKTINFO CMSG_SPACE(sizeof(struct in_pktinfo))
 #define CMSG4_SPACE_TTL CMSG_SPACE(sizeof(int))
 
@@ -117,10 +92,7 @@ sk_request_cmsg4_pktinfo(sock *s)
 static inline int
 sk_request_cmsg4_ttl(sock *s)
 {
-  int y = 1;
-
-  if (setsockopt(s->fd, IPPROTO_IP, IP_RECVTTL, &y, sizeof(y)) < 0)
-    ERR("IP_RECVTTL");
+  ERR_MSG("Kernel does not support IPv4 TTL security(request)");
 
   return 0;
 }
@@ -181,43 +153,12 @@ sk_prepare_ip_header(sock *s, void *hdr, int dlen)
   ip->ip_p = s->dport;
   ip->ip_src = ipa_to_in4(s->saddr);
   ip->ip_dst = ipa_to_in4(s->daddr);
-
-#ifdef __OpenBSD__
-  /* OpenBSD expects ip_len in network order, other BSDs expect host order */
-  ip->ip_len = htons(ip->ip_len);
-#endif
 }
-
-/*
- *	Miscellaneous Linux socket syscalls
- */
 
 int
 sk_set_md5_auth(sock *s, ip_addr a, struct iface *ifa, char *passwd)
 {
-  struct tcp_md5sig md5;
-
-  memset(&md5, 0, sizeof(md5));
-  sockaddr_fill((sockaddr *) &md5.tcpm_addr, s->af, a, ifa, 0);
-
-  if (passwd)
-  {
-    int len = strlen(passwd);
-
-    if (len > TCP_MD5SIG_MAXKEYLEN)
-      ERR_MSG("MD5 password too long");
-
-    md5.tcpm_keylen = len;
-    memcpy(&md5.tcpm_key, passwd, len);
-  }
-
-  if (setsockopt(s->fd, SOL_TCP, TCP_MD5SIG, &md5, sizeof(md5)) < 0)
-  {
-    if (errno == ENOPROTOOPT)
-      ERR_MSG("Kernel does not support TCP MD5 signatures");
-    else
-      ERR("TCP_MD5SIG");
-  }
+  ERR_MSG("Kernel does not support TCP MD5 signatures");
 
   return 0;
 }
@@ -225,13 +166,7 @@ sk_set_md5_auth(sock *s, ip_addr a, struct iface *ifa, char *passwd)
 static inline int
 sk_set_min_ttl4(sock *s, int ttl)
 {
-  if (setsockopt(s->fd, SOL_IP, IP_MINTTL, &ttl, sizeof(ttl)) < 0)
-  {
-    if (errno == ENOPROTOOPT)
-      ERR_MSG("Kernel does not support IPv4 TTL security");
-    else
-      ERR("IP_MINTTL");
-  }
+  ERR_MSG("Kernel does not support IPv4 TTL security");
 
   return 0;
 }
@@ -245,14 +180,12 @@ sk_set_min_ttl6(sock *s, int ttl)
 static inline int
 sk_disable_mtu_disc4(sock *s)
 {
-  /* TODO: Set IP_DONTFRAG to 0 ? */
   return 0;
 }
 
 static inline int
 sk_disable_mtu_disc6(sock *s)
 {
-  /* TODO: Set IPV6_DONTFRAG to 0 ? */
   return 0;
 }
 
@@ -263,4 +196,3 @@ sk_set_priority(sock *s, int prio)
 {
   ERR_MSG("Socket priority not supported");
 }
-

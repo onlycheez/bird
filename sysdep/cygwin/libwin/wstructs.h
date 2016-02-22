@@ -5,6 +5,10 @@
 #include <stdint.h>
 
 /**
+ * Defines mappings between winsock library and bird.
+ */
+
+/**
  * Interface type
  */
 enum wiftype {
