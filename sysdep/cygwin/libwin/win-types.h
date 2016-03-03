@@ -1,6 +1,6 @@
 
-#ifndef _WINDOWS_STRUCT_H_
-#define _WINDOWS_STRUCT_H_
+#ifndef _BIRD_WIN_TYPES_H_
+#define _BIRD_WIN_TYPES_H_
 
 #include <stdint.h>
 
