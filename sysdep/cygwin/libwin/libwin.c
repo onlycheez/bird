@@ -5,6 +5,8 @@
 #include <stdio.h>
 
 #include "wstructs.h"
+#include "win-log.h"
+#include "win-util.h"
 
 /* GUID length + 2 for parenthesis */
 #define GUID_LENGTH 39
@@ -24,77 +26,6 @@ static void *list_iter;
     length += 1; \
     list_iter = (void *)(((T)list_iter)->Next); \
   };
-
-void die(const char *msg, ...) __attribute__((noreturn));
-
-LPVOID wmalloc(ULONG size)
-{
-  void *p = malloc(size);
-  if (p)
-  {
-    return p;
-  }
-  die("Unable to allocate %d bytes of memory", size);
-}
-
-LPVOID wrealloc(void *ptr, ULONG size)
-{
-  void *p = realloc(ptr, size);
-  if (p)
-  {
-    return p;
-  }
-  die("Unable to allocate %d bytes of memory", size);
-}
-
-static char* get_error_msg(DWORD retval)
-{
-  DWORD code = (retval == 0) ? GetLastError() : retval;
-  LPSTR buffer = NULL;
-  size_t size = 0;
-
-  if (code == 0)
-  {
-    size = 16;
-    buffer = "No error message";
-  }
-  else
-  {
-    size = FormatMessageA(
-      FORMAT_MESSAGE_ALLOCATE_BUFFER |
-      FORMAT_MESSAGE_FROM_SYSTEM |
-      FORMAT_MESSAGE_IGNORE_INSERTS,
-      NULL,
-      code,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-      (LPSTR)&buffer,
-      0,
-      NULL);
-  }
-
-  char *msg = wmalloc(size + 1);
-  memset(msg, 0, size + 1);
-  memcpy(msg, buffer, size);
-
-  LocalFree(buffer);
-
-  return msg;
-}
-
-static wlog(const char *format, ...)
-{
-  va_list ap;
-  va_start(ap, format);
-  vfprintf(stderr, format, ap);
-  va_end(ap);
-}
-
-#define log_winapi_error(fc_name, retval) \
-  { \
-    char *msg = get_error_msg(retval); \
-    wlog(fc_name " failed (0x%x). %s", retval, msg); \
-    free(msg); \
-  }
 
 /**
  * Adds ip addresses to struct wiface.
