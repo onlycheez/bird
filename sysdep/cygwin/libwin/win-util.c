@@ -1,3 +1,8 @@
+/*
+ *  BIRD -- Utility functions for libwin module.
+ *
+ *  Can be freely distributed and used under the terms of the GNU GPL.
+ */
 
 #include <malloc.h>
 #include <stdlib.h>

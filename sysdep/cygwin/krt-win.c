@@ -1,7 +1,7 @@
 /*
- *	BIRD -- Windows Routing Table Syncing
+ *  BIRD -- Windows Routing Table Syncing
  *
- *	Can be freely distributed and used under the terms of the GNU GPL.
+ *  Can be freely distributed and used under the terms of the GNU GPL.
  */
 
 #include <stdlib.h>

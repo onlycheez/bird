@@ -1,3 +1,8 @@
+/*
+ *  BIRD -- Layer between Windows & BIRD.
+ *
+ *  Can be freely distributed and used under the terms of the GNU GPL.
+ */
 
 #ifndef _BIRD_WIN_TYPES_H_
 #define _BIRD_WIN_TYPES_H_
@@ -6,6 +11,12 @@
 
 /**
  * Defines mappings between winsock library and bird.
+ *
+ * Windows IP Helper API cannot be called directly from BIRD because Windows
+ * system headers collide with Unix system headers.
+ * So values and types from IP Helper are converted to structs and types defined
+ * here. This headers is then included in both libwin module (calling winapi)
+ * and BIRD sysdep module.
  */
 
 /**

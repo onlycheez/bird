@@ -1,3 +1,8 @@
+/*
+ *  BIRD -- Windows network interfaces & route tables syncing.
+ *
+ *  Can be freely distributed and used under the terms of the GNU GPL.
+ */
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -14,17 +19,17 @@
 
 #define FAMILY_FROM_IPV(version) ((version == 6) ? AF_INET6 : AF_INET)
 
-/* Must not be used directly but by following #define only. */
-static void *list_iter;
+/* Must not be used directly but by LIST_LENGTH macro only. */
+static void *_list_iter;
 
-/* Return length of Windows linked list structures with 'Next' member. */
-#define LIST_LENGTH(list, T, length) \
-  list_iter = (void *)list; \
+/* Count length of IP Helper API linked lists with 'Next' member. */
+#define _list_length(list, T, length) \
+  _list_iter = list; \
   length = 0; \
-  while (list_iter) \
+  while (_list_iter) \
   { \
     length += 1; \
-    list_iter = (void *)(((T)list_iter)->Next); \
+    _list_iter = (((T) _list_iter)->Next); \
   };
 
 /**
@@ -39,7 +44,7 @@ static void get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address,
     return;
   }
 
-  LIST_LENGTH(address, IP_ADAPTER_UNICAST_ADDRESS *, wiface->addrs_cnt);
+  _list_length(address, IP_ADAPTER_UNICAST_ADDRESS *, wiface->addrs_cnt);
   wiface->addrs = wmalloc(wiface->addrs_cnt * sizeof(struct wifa));
 
   IP_ADAPTER_UNICAST_ADDRESS *addr = address;
@@ -131,7 +136,7 @@ retry:
   }
 
   int length;
-  LIST_LENGTH(adapters, IP_ADAPTER_ADDRESSES*, length);
+  _list_length(adapters, IP_ADAPTER_ADDRESSES*, length);
 
   struct wiface *wifaces = wmalloc(length * sizeof(struct wiface));
   IP_ADAPTER_ADDRESSES *adapter;

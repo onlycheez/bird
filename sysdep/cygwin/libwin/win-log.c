@@ -1,3 +1,8 @@
+/*
+ *  BIRD -- Windows logging
+ *
+ *  Can be freely distributed and used under the terms of the GNU GPL.
+ */
 
 #include <stdio.h>
 #include <windows.h>
@@ -5,32 +10,40 @@
 #include "win-log.h"
 #include "win-util.h"
 
+/**
+ * Logging under windows.
+ *
+ * When running on Windows/Cygwin, the code calling winapi cannot use BIRD's
+ * common logger because it includes Unix system headers which collides with
+ * WindowS/Cygwin system headers.
+ */
+
 static FILE *log_file = NULL;
 
-static char* get_error_msg(DWORD retval)
+/**
+ * Retrieves string representation of error code. If error code isn't provided
+ * (equals 0) it uses thread's last error code.
+ */
+static char* _winapi_error_string(DWORD retval)
 {
   DWORD code = (retval == 0) ? GetLastError() : retval;
   LPSTR buffer = NULL;
-  size_t size = 0;
 
   if (code == 0)
   {
-    size = 16;
-    buffer = "No error message";
+    return strdup("No error message");
   }
-  else
-  {
-    size = FormatMessageA(
-      FORMAT_MESSAGE_ALLOCATE_BUFFER |
-      FORMAT_MESSAGE_FROM_SYSTEM |
-      FORMAT_MESSAGE_IGNORE_INSERTS,
-      NULL,
-      code,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-      (LPSTR) &buffer,
-      0,
-      NULL);
-  }
+
+  size_t size = FormatMessageA(
+    FORMAT_MESSAGE_ALLOCATE_BUFFER |
+    FORMAT_MESSAGE_FROM_SYSTEM |
+    FORMAT_MESSAGE_IGNORE_INSERTS,
+    NULL,
+    code,
+    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+    (LPSTR) &buffer,
+    0,
+    NULL);
 
   char *msg = wmalloc(size + 1);
   memset(msg, 0, size + 1);
@@ -41,13 +54,20 @@ static char* get_error_msg(DWORD retval)
   return msg;
 }
 
-void log_winapi_error(const char *fc_name, DWORD retval)
+/**
+ * Obtains error message for given retval and logs it together with
+ * API function name using WLOG_ERROR log level.
+ */
+void win_log_api_error(const char *fc_name, DWORD retval)
 {
-  char *msg = get_error_msg(retval);
+  char *msg = _winapi_error_string(retval);
   wlog(WLOG_ERROR, "%s failed (0x%x). %s", fc_name, retval, msg);
   free(msg);
 }
 
+/**
+ * Logs into file with specified log level.
+ */
 void wlog(enum Wlog_level level, const char *format, ...)
 {
   static const char *LOG_FILE_LOCATION = "C:\\bird\\win.log";

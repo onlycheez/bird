@@ -1,9 +1,7 @@
 /*
- *	BIRD -- Linux Kernel Netlink Route Syncer
+ *  BIRD -- Windows Routing Table Syncing
  *
- *	(c) 1998--2000 Martin Mares <mj@ucw.cz>
- *
- *	Can be freely distributed and used under the terms of the GNU GPL.
+ *  Can be freely distributed and used under the terms of the GNU GPL.
  */
 
 #ifndef _BIRD_KRT_SYS_H_
@@ -31,8 +29,6 @@ static inline struct ifa * kif_get_primary_ip(struct iface *i) { return NULL; }
 
 
 /* Kernel routes */
-
-#define NL_NUM_TABLES 256
 
 struct krt_params {
 };
