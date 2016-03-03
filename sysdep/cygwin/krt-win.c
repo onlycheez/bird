@@ -13,8 +13,8 @@
 #include "nest/protocol.h"
 #include "nest/iface.h"
 #include "lib/krt.h"
-#include "sysdep/cygwin/libwin/libwin.h"
-#include "sysdep/cygwin/libwin/wstructs.h"
+#include "sysdep/cygwin/libwin/win-krt.h"
+#include "sysdep/cygwin/libwin/win-types.h"
 
 #define SKIP(ARG...) do { DBG("KRT: Ignoring route - " ARG); return; } while(0)
 

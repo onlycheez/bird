@@ -1,5 +1,5 @@
 
-#include "wstructs.h"
+#include "win-types.h"
 
 /**
  * @param[in] ipv IP version.

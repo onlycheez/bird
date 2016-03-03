@@ -4,7 +4,7 @@
 #include <iphlpapi.h>
 #include <stdio.h>
 
-#include "wstructs.h"
+#include "win-types.h"
 #include "win-log.h"
 #include "win-util.h"
 
