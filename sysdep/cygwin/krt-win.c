@@ -30,17 +30,20 @@ kif_sys_shutdown(struct kif_proto *p)
 
 }
 
-static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
+/**
+ * Copies values from struct wiface to struct iface.
+ */
+static void _wiface_to_iface(const struct wiface *wiface, struct iface *iface)
 {
   bzero(iface, sizeof(struct iface));
   bzero(iface->name, sizeof(iface->name));
 
-  memcpy(iface->name, wif.name, strlen(wif.name));
-  iface->index = (unsigned)wif.index;
-  iface->mtu = (unsigned)wif.mtu;
-  iface->luid = wif.luid;
+  memcpy(iface->name, wiface->name, strlen(wiface->name));
+  iface->index = (unsigned) wiface->index;
+  iface->mtu = (unsigned) wiface->mtu;
+  iface->luid = wiface->luid;
 
-  switch (wif.type)
+  switch (wiface->type)
   {
     case W_IF_LOOPBACK:
       iface->flags |= IF_MULTIACCESS | IF_LOOPBACK | IF_IGNORE;
@@ -56,7 +59,7 @@ static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
       iface->flags |= IF_MULTICAST;
   }
 
-  if (wif.is_up)
+  if (wiface->is_up)
   {
     iface->flags |= IF_ADMIN_UP;
     iface->flags |= IF_LINK_UP;
@@ -70,7 +73,7 @@ static void wstruct_fill_iface(struct wiface wif, struct iface *iface)
  * Assigns value of struct wip to ip_addr. Handles IP versions.
  * Result is Little Endian.
  */
-static void assign_to_ip_addr(ip_addr *dst, struct wip *src)
+static void _wip_to_ip_addr(const struct wip *src, ip_addr *dst)
 {
 #ifdef IPV6
   *dst = IPA_NONE;
@@ -89,7 +92,7 @@ static void assign_to_ip_addr(ip_addr *dst, struct wip *src)
  * Assigns value of ip_addr to struct wip. Handles IP versions.
  * Result is Big Endian.
  */
-static void assign_from_ip_addr(struct wip *dst, ip_addr *src)
+static void _ip_addr_to_wip(const ip_addr *src, struct wip *dst)
 {
 #ifdef IPV6
   int i, j;
@@ -104,7 +107,11 @@ static void assign_from_ip_addr(struct wip *dst, ip_addr *src)
 #endif
 }
 
-static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
+/**
+ * Converts struct wifa to struct ifa and associates with struct iface.
+ *
+ */
+static void _wifa_to_ifa(const struct wifa *wifa, struct iface *iface,
   struct ifa *ifa)
 {
   bzero(ifa, sizeof(struct ifa));
@@ -124,12 +131,12 @@ static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
   }
 
   ifa->pxlen = wifa->pxlen;
-  assign_to_ip_addr(&ifa->ip, &wifa->addr);
+  _wip_to_ip_addr(&wifa->addr, &ifa->ip);
 
   if (wifa->pxlen == BITS_PER_IP_ADDRESS)
   {
     ip_addr addr;
-    assign_to_ip_addr(&addr, &wifa->addr);
+    _wip_to_ip_addr(&wifa->addr, &addr);
     ifa->prefix = ifa->brd = addr;
 
     /* It is either a host address or a peer address */
@@ -147,7 +154,9 @@ static void wstruct_fill_ifa(struct wifa *wifa, struct iface *iface,
     ifa->prefix = ipa_and(ifa->ip, netmask);
     ifa->brd = ipa_or(ifa->ip, ipa_not(netmask));
     if (wifa->pxlen == BITS_PER_IP_ADDRESS - 1)
+    {
       ifa->opposite = ipa_opposite_m1(ifa->ip);
+    }
   }
 
   int scope = ipa_classify(ifa->ip);
@@ -175,14 +184,14 @@ kif_do_scan(struct kif_proto *p UNUSED)
 
   for (i = 0; i < cnt; i++)
   {
-    wstruct_fill_iface(wifaces[i], &iface);
+    _wiface_to_iface(wifaces + i, &iface);
 
     if_update(&iface);
     if_end_partial_update(&iface);
 
     for (j = 0; j < wifaces[i].addrs_cnt; j++)
     {
-      wstruct_fill_ifa(&(wifaces[i].addrs[j]), &iface, &ifa);
+      _wifa_to_ifa(&(wifaces[i].addrs[j]), &iface, &ifa);
       ifa_update(&ifa);
     }
 
@@ -205,7 +214,7 @@ krt_sys_shutdown(struct krt_proto *p UNUSED)
 
 }
 
-static int alleged_route_source(enum wkrtsrc src)
+static int _wkrtsrc_to_alleged_route_source(enum wkrtsrc src)
 {
   switch (src)
   {
@@ -222,11 +231,11 @@ static int alleged_route_source(enum wkrtsrc src)
   }
 }
 
-static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
+static void _wkrt_parse_route(struct krt_proto *p, struct wrtentry *wrtentry)
 {
   ip_addr idst, igw;
-  assign_to_ip_addr(&idst, &entry->dst);
-  assign_to_ip_addr(&igw, &entry->next_hop);
+  _wip_to_ip_addr(&wrtentry->dst, &idst);
+  _wip_to_ip_addr(&wrtentry->next_hop, &igw);
 
   int c = ipa_classify_net(idst);
   if ((c < 0) || !(c & IADDR_HOST) || ((c & IADDR_SCOPE_MASK) <= SCOPE_LINK))
@@ -241,18 +250,18 @@ static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
     .scope = SCOPE_UNIVERSE,
     .cast = RTC_UNICAST
   };
-  net *net = net_get(p->p.table, idst, entry->pxlen);
+  net *net = net_get(p->p.table, idst, wrtentry->pxlen);
 
-  if (entry->is_unreachable)
+  if (wrtentry->is_unreachable)
   {
     ra.dest = RTD_UNREACHABLE;
     goto done;
   }
 
-  ra.iface = if_find_by_luid(entry->luid);
+  ra.iface = if_find_by_luid(wrtentry->luid);
   if (!ra.iface)
   {
-    SKIP("iface with luid %lx not found", entry->luid);
+    SKIP("iface with luid %lx not found", wrtentry->luid);
   }
 
   if (ipa_nonzero2(igw))
@@ -278,8 +287,8 @@ static void wkrt_parse_route(struct krt_proto *p, struct wrtentry *entry)
 done:
   re = rte_get_temp(&ra);
   re->net = net;
-  re->u.krt.src = alleged_route_source(entry->src);
-  re->u.krt.proto = entry->proto_id;
+  re->u .krt.src = _wkrtsrc_to_alleged_route_source(wrtentry->src);
+  re->u.krt.proto = wrtentry->proto_id;
   re->u.krt.type = 0;
   //re->u.krt.metric = (entry->metric == -1) ? 0 : entry->metric;
   re->u.krt.metric = 0;
@@ -290,59 +299,59 @@ done:
 void
 krt_do_scan(struct krt_proto *p)
 {
-  struct wrtentry *entries;
+  struct wrtentry *wrtentries;
   int idx, cnt;
 
 #ifdef IPV6
-  entries = win_rt_scan(6, &cnt);
+  wrtentries = win_rt_scan(6, &cnt);
 #else
-  entries = win_rt_scan(4, &cnt);
+  wrtentries = win_rt_scan(4, &cnt);
 #endif
 
   for (idx = 0; idx < cnt; idx++)
   {
-    wkrt_parse_route(p, entries + idx);
+    _wkrt_parse_route(p, wrtentries + idx);
   }
 
-  free(entries);
+  free(wrtentries);
 }
 
-static void wstruct_init_wrtentry(struct wrtentry *entry, rte *re)
+static void _wrt_entry_init(struct wrtentry *wrtentry, rte *re)
 {
   net *net = re->net;
   rta *ra = re->attrs;
   struct iface *iface = ra->iface;
 
-  entry->luid = iface->luid;
-  entry->proto_id = KRT_SRC_BIRD;
+  wrtentry->luid = iface->luid;
+  wrtentry->proto_id = KRT_SRC_BIRD;
 
   if (ra->dest == RTD_ROUTER)
   {
-    assign_from_ip_addr(&entry->dst, &net->n.prefix);
-    assign_from_ip_addr(&entry->next_hop, &ra->gw);
-    entry->pxlen = net->n.pxlen;
+    _ip_addr_to_wip(&net->n.prefix, &wrtentry->dst);
+    _ip_addr_to_wip(&ra->gw, &wrtentry->next_hop);
+    wrtentry->pxlen = net->n.pxlen;
   }
   else if (ra->dest == RTD_DEVICE)
   {
 #ifdef IPV6
-    bzero(entry->next_hop.u.ipv6.bytes, 16);
+    bzero(wrtentry->next_hop.u.ipv6.bytes, 16);
 #else
-    entry->next_hop.u.ipv4 = 0;
+    wrtentry->next_hop.u.ipv4 = 0;
 #endif
-    assign_from_ip_addr(&entry->dst, &net->n.prefix);
-    entry->pxlen = net->n.pxlen;
+    _ip_addr_to_wip(&net->n.prefix, &wrtentry->dst);
+    wrtentry->pxlen = net->n.pxlen;
   }
   else if (ra->dest == RTD_BLACKHOLE)
   {
     /* Windows doesn't support blackhole so invalid ip is used instead. */
 #ifdef IPV6
-    bzero(entry->dst.u.ipv6.bytes, 16);
-    bzero(entry->next_hop.u.ipv6.bytes, 16);
+    bzero(wrtentry->dst.u.ipv6.bytes, 16);
+    bzero(wrtentry->next_hop.u.ipv6.bytes, 16);
 #else
-    entry->dst.u.ipv4 = 0;
-    entry->next_hop.u.ipv4 = 0;
+    wrtentry->dst.u.ipv4 = 0;
+    wrtentry->next_hop.u.ipv4 = 0;
 #endif
-    entry->pxlen = MAX_PREFIX_LENGTH;
+    wrtentry->pxlen = MAX_PREFIX_LENGTH;
   }
   else
   {
@@ -358,7 +367,7 @@ krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old,
 
   if (old)
   {
-    wstruct_init_wrtentry(&entry, old);
+    _wrt_entry_init(&entry, old);
 #ifdef IPV6
     win_rt_delete(&entry, 6);
 #else
@@ -368,7 +377,7 @@ krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old,
 
   if (new)
   {
-    wstruct_init_wrtentry(&entry, new);
+    _wrt_entry_init(&entry, new);
 #ifdef IPV6
     win_rt_create(&entry, 6);
 #else

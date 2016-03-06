@@ -13,10 +13,7 @@
 #include "win-log.h"
 #include "win-util.h"
 
-/* GUID length + 2 for parenthesis */
-#define GUID_LENGTH 39
 #define MIB_IPROTO_BIRD 11001
-
 #define FAMILY_FROM_IPV(version) ((version == 6) ? AF_INET6 : AF_INET)
 
 /* Must not be used directly but by LIST_LENGTH macro only. */
@@ -33,9 +30,9 @@ static void *_list_iter;
   };
 
 /**
- * Adds ip addresses to struct wiface.
+ * Copies interface's ip addresses to struct wiface.
  */
-static void get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address,
+static void _get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address,
   struct wiface *wiface, int ipv)
 {
   if (!address)
@@ -58,7 +55,7 @@ static void get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address,
       sockaddr = addr->Address.lpSockaddr;
       memcpy(
         wiface->addrs[idx].addr.u.ipv6.bytes,
-        ((struct sockaddr_in6 *)sockaddr)->sin6_addr.u.Byte,
+        ((struct sockaddr_in6 *) sockaddr)->sin6_addr.u.Byte,
         16);
 
       wiface->addrs[idx].pxlen = addr->OnLinkPrefixLength;
@@ -84,7 +81,7 @@ static void get_adapter_addrs(IP_ADAPTER_UNICAST_ADDRESS *address,
  * Converts Windows kernel access enum type to windows-bird compatibility
  * type.
  */
-static enum wiftype convert_access_type(NET_IF_ACCESS_TYPE access_type)
+static enum wiftype _access_type(NET_IF_ACCESS_TYPE access_type)
 {
   switch (access_type)
   {
@@ -103,7 +100,7 @@ static enum wiftype convert_access_type(NET_IF_ACCESS_TYPE access_type)
 }
 
 /**
- * Returns array of structures representing network interfaces.
+ * Returns array of network interfaces structures.
  */
 struct wiface* win_if_scan(int ipv, int *cnt)
 {
@@ -131,7 +128,7 @@ retry:
   }
   else if (retval != ERROR_SUCCESS)
   {
-    log_winapi_error("GetAdaptersAddresses", retval);
+    win_log_api_error("GetAdaptersAddresses", retval);
     return NULL;
   }
 
@@ -150,7 +147,8 @@ retry:
     }
 
     memset(wifaces[idx].name, 0, 64);
-    memcpy(wifaces[idx].name, adapter->AdapterName, strlen(adapter->AdapterName));
+    memcpy(wifaces[idx].name, adapter->AdapterName,
+      strlen(adapter->AdapterName));
     wifaces[idx].luid = adapter->Luid.Value;
     wifaces[idx].index = adapter->IfIndex;
     wifaces[idx].mtu = adapter->Mtu;
@@ -158,7 +156,7 @@ retry:
     if (adapter->OperStatus == 1)
     {
       wifaces[idx].is_up = 1;
-      get_adapter_addrs(adapter->FirstUnicastAddress, wifaces + idx, ipv);
+      _get_adapter_addrs(adapter->FirstUnicastAddress, wifaces + idx, ipv);
     }
     else
     {
@@ -171,10 +169,10 @@ retry:
     retval = GetIfEntry2(&adapter_details);
     if (retval != ERROR_SUCCESS)
     {
-      log_winapi_error("GetIfEntry2", retval);
+      win_log_api_error("GetIfEntry2", retval);
     }
 
-    wifaces[idx].type = convert_access_type(adapter_details.AccessType);
+    wifaces[idx].type = _access_type(adapter_details.AccessType);
     idx += 1;
   }
 
@@ -188,9 +186,9 @@ retry:
  * Converts Windows kernel protocol enum type to windows-bird compatibility
  * type.
  */
-static enum wkrtsrc convert_proto_type(int winapi_proto_type)
+static enum wkrtsrc _proto_type(int proto_type)
 {
-  switch (winapi_proto_type)
+  switch (proto_type)
   {
     case MIB_IPROTO_BIRD:
       return W_KRT_SRC_BIRD;
@@ -210,7 +208,7 @@ static enum wkrtsrc convert_proto_type(int winapi_proto_type)
 /**
  * Checks whether given interface type is valid (the one BIRD can deal with).
  */
-static int is_iftype_valid(int iftype)
+static int _is_iftype_valid(int iftype)
 {
   switch (iftype)
   {
@@ -229,10 +227,10 @@ static int is_iftype_valid(int iftype)
   }
 }
 
-static char is_route_valid(MIB_IPFORWARD_ROW2 *route, int ipv)
+static char _is_route_valid(const MIB_IPFORWARD_ROW2 *route, int ipv)
 {
   if ((route->Protocol <= 1 || route->Protocol >= 14) &&
-      (!is_iftype_valid(route->InterfaceLuid.Info.IfType)))
+      (!_is_iftype_valid(route->InterfaceLuid.Info.IfType)))
   {
     return 0;
   }
@@ -281,27 +279,28 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   retval = GetIpForwardTable2(family, &routes);
   if (retval != ERROR_SUCCESS)
   {
-    log_winapi_error("GetIpForwardTable2", retval);
+    win_log_api_error("GetIpForwardTable2", retval);
     return;
   }
 
   *cnt = routes->NumEntries;
-  rt_entries = (struct wrtentry *)wmalloc(*cnt * sizeof(struct wrtentry));
+  rt_entries = (struct wrtentry *) wmalloc((*cnt) * sizeof(struct wrtentry));
 
   int idx, real_count = 0;
   for (idx = 0; idx < *cnt; idx++)
   {
     route = routes->Table + idx;
 
-    if (!is_route_valid(route, ipv))
+    if (!_is_route_valid(route, ipv))
     {
       continue;
     }
 
     rt_entries[real_count].luid = route->InterfaceLuid.Value;
-    rt_entries[real_count].src = convert_proto_type(route->Protocol);
+    rt_entries[real_count].src = _proto_type(route->Protocol);
     rt_entries[real_count].metric = route->Metric;
-    rt_entries[real_count].proto_id = (int)route->Protocol;
+    rt_entries[real_count].proto_id = (int) route->Protocol;
+
     if (family == AF_INET6)
     {
       memcpy(rt_entries[real_count].next_hop.u.ipv6.bytes,
@@ -322,9 +321,10 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
     ipnet.InterfaceLuid = route->InterfaceLuid;
     ipnet.Address.Ipv4 = route->NextHop.Ipv4;
     retval = GetIpNetEntry2(&ipnet);
+
     if (retval != ERROR_SUCCESS)
     {
-      log_winapi_error("GetIpNetEntry2", retval);
+      win_log_api_error("GetIpNetEntry2", retval);
     }
     else
     {
@@ -343,8 +343,8 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
 /**
  * Fill MIB_IPFORWARD_ROW2 strucuture with values from struct wrtentry.
  */
-static ip_forward_entry_set_addresses(MIB_IPFORWARD_ROW2 *route,
-  struct wrtentry *entry, int ipv)
+static _wrtentry_to_ipforward_row(const struct wrtentry *entry,
+  MIB_IPFORWARD_ROW2 *route, int ipv)
 {
   route->DestinationPrefix.PrefixLength = entry->pxlen;
 
@@ -375,30 +375,30 @@ static ip_forward_entry_set_addresses(MIB_IPFORWARD_ROW2 *route,
 /**
  * Delete route netry from kernel table.
  */
-void win_rt_delete(struct wrtentry *entry, int ipv)
+void win_rt_delete(const struct wrtentry *entry, int ipv)
 {
   MIB_IPFORWARD_ROW2 route;
   route.InterfaceLuid.Value = entry->luid;
-  ip_forward_entry_set_addresses(&route, entry, ipv);
+  _wrtentry_to_ipforward_row(entry, &route, ipv);
 
   int retval = DeleteIpForwardEntry2(&route);
   if (retval != ERROR_SUCCESS)
   {
-    log_winapi_error("DeleteIpForwardEntry2", retval);
+    win_log_api_error("DeleteIpForwardEntry2", retval);
   }
 }
 
 /**
  * Create route entry in kernel table.
  */
-void win_rt_create(struct wrtentry *entry, int ipv)
+void win_rt_create(const struct wrtentry *entry, int ipv)
 {
   int retval;
   MIB_IPFORWARD_ROW2 route;
   InitializeIpForwardEntry(&route);
 
   route.InterfaceLuid.Value = entry->luid;
-  ip_forward_entry_set_addresses(&route, entry, ipv);
+  _wrtentry_to_ipforward_row(entry, &route, ipv);
 
   route.Loopback = FALSE;
   route.Metric = -1;
@@ -407,6 +407,6 @@ void win_rt_create(struct wrtentry *entry, int ipv)
   retval = CreateIpForwardEntry2(&route);
   if (retval != ERROR_SUCCESS)
   {
-    log_winapi_error("CreateIpForwardEntry2", retval);
+    win_log_api_error("CreateIpForwardEntry2", retval);
   }
 }

@@ -15,12 +15,12 @@
  * Windows IP Helper API cannot be called directly from BIRD because Windows
  * system headers collide with Unix system headers.
  * So values and types from IP Helper are converted to structs and types defined
- * here. This headers is then included in both libwin module (calling winapi)
+ * here. This header is then included in both libwin module (calling winapi)
  * and BIRD sysdep module.
  */
 
 /**
- * Interface type
+ * Interface type.
  */
 enum wiftype {
   W_IF_UNKOWN = 0,
@@ -31,7 +31,7 @@ enum wiftype {
 };
 
 /**
- * Route entry source
+ * Route entry source.
  */
 enum wkrtsrc {
   W_KRT_SRC_UNKNOWN = 0,
@@ -42,7 +42,7 @@ enum wkrtsrc {
 };
 
 /**
- * Destination type
+ * Destination type.
  */
 enum wdst {
   W_DST_UNKOWN = 0,
@@ -51,7 +51,7 @@ enum wdst {
 };
 
 /**
- * IP address
+ * IP address.
  */
 struct wip {
   union {
@@ -63,7 +63,7 @@ struct wip {
 };
 
 /**
- * Network interface address
+ * Network interface address.
  */
 struct wifa {
   struct wip addr;
@@ -71,7 +71,7 @@ struct wifa {
 };
 
 /**
- * Netowrk interface
+ * Network interface.
  */
 struct wiface {
   char name[64];
@@ -85,7 +85,7 @@ struct wiface {
 };
 
 /**
- * Route entry
+ * Route entry.
  */
 struct wrtentry {
   uint64_t luid;
