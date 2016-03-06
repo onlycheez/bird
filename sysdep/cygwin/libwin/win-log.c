@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <time.h>
 #include <windows.h>
 
 #include "win-log.h"
@@ -18,7 +19,18 @@
  * WindowS/Cygwin system headers.
  */
 
+#define DATETIME_FMT "%Y-%m-%d %H:%M:%S"
+#define DATETIME_LENGTH 32
+static char DATETIME_BUFFER[DATETIME_LENGTH];
 static FILE *log_file = NULL;
+
+static const char* _current_formatted_datetime(void)
+{
+  time_t t = time(NULL);
+  struct tm *tm = localtime(&t);
+  strftime(DATETIME_BUFFER, DATETIME_LENGTH, DATETIME_FMT, tm);
+  return DATETIME_BUFFER;
+}
 
 /**
  * Retrieves string representation of error code. If error code isn't provided
@@ -76,6 +88,8 @@ void wlog(enum Wlog_level level, const char *format, ...)
   {
     log_file = fopen(LOG_FILE_LOCATION, "a");
   }
+
+  fprintf(log_file, "%s ", _current_formatted_datetime());
 
   switch (level)
   {
