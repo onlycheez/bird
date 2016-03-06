@@ -195,7 +195,9 @@ AC_SUBST(sysdep_dirs)
 if test "$using_cygwin" = yes ; then
 	export CYGWIN="${CYGWIN} winsymlinks"
 	AC_DEFINE(BIRD_CYGWIN)
-	WIN_LIBS="../sysdep/cygwin/libwin/libwin.a -liphlpapi"
+	LIBWIN_A="../sysdep/cygwin/libwin/libwin.a"
+	AC_SUBST(LIBWIN_A)
+	WIN_LIBS="${LIBWIN_A} -liphlpapi"
 	AC_SUBST(WIN_LIBS)
 fi
 
