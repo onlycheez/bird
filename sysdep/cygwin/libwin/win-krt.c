@@ -393,7 +393,6 @@ void win_rt_delete(const struct wrtentry *entry, int ipv)
  */
 void win_rt_create(const struct wrtentry *entry, int ipv)
 {
-  int retval;
   MIB_IPFORWARD_ROW2 route;
   InitializeIpForwardEntry(&route);
 
@@ -404,8 +403,9 @@ void win_rt_create(const struct wrtentry *entry, int ipv)
   route.Metric = -1;
   route.Protocol = MIB_IPROTO_BIRD;
 
-  retval = CreateIpForwardEntry2(&route);
-  if (retval != ERROR_SUCCESS)
+  int retval = CreateIpForwardEntry2(&route);
+  if (retval != ERROR_SUCCESS &&
+      retval != ERROR_OBJECT_ALREADY_EXISTS)
   {
     win_log_api_error("CreateIpForwardEntry2", retval);
   }
