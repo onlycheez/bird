@@ -18,14 +18,12 @@
 
 #define SKIP(ARG...) do { DBG("KRT: Ignoring route - " ARG); return; } while(0)
 
-void
-kif_sys_start(struct kif_proto *p UNUSED)
+void kif_sys_start(struct kif_proto *p UNUSED)
 {
 
 }
 
-void
-kif_sys_shutdown(struct kif_proto *p)
+void kif_sys_shutdown(struct kif_proto *p)
 {
 
 }
@@ -168,8 +166,7 @@ static void _wifa_to_ifa(const struct wifa *wifa, struct iface *iface,
   ifa->scope = scope & IADDR_SCOPE_MASK;
 }
 
-void
-kif_do_scan(struct kif_proto *p UNUSED)
+void kif_do_scan(struct kif_proto *p UNUSED)
 {
   struct wiface *wifaces;
   struct iface iface;
@@ -202,14 +199,12 @@ kif_do_scan(struct kif_proto *p UNUSED)
   if_end_update();
 }
 
-void
-krt_sys_start(struct krt_proto *p)
+int krt_sys_start(struct krt_proto *p)
 {
-
+  return 1;
 }
 
-void
-krt_sys_shutdown(struct krt_proto *p UNUSED)
+void krt_sys_shutdown(struct krt_proto *p UNUSED)
 {
 
 }
@@ -296,8 +291,7 @@ done:
   krt_got_route(p, re);
 }
 
-void
-krt_do_scan(struct krt_proto *p)
+void krt_do_scan(struct krt_proto *p)
 {
   struct wrtentry *wrtentries;
   int idx, cnt;
@@ -359,8 +353,7 @@ static void _wrt_entry_init(struct wrtentry *wrtentry, rte *re)
   }
 }
 
-void
-krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old,
+void krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old,
   struct ea_list *eattrs)
 {
   struct wrtentry entry;
@@ -386,38 +379,32 @@ krt_replace_rte(struct krt_proto *p, net *n, rte *new, rte *old,
   }
 }
 
-int
-krt_sys_reconfigure(struct krt_proto *p UNUSED, struct krt_config *n, struct krt_config *o)
+int krt_sys_reconfigure(struct krt_proto *p UNUSED, struct krt_config *n, struct krt_config *o)
 {
   return 1;
 }
 
-int
-krt_capable(rte *e)
+int krt_capable(rte *e)
 {
   return 1;
 }
 
-void
-krt_sys_init_config(struct krt_config *cf)
+void krt_sys_init_config(struct krt_config *cf)
 {
 
 }
 
-void
-krt_sys_copy_config(struct krt_config *d, struct krt_config *s)
+void krt_sys_copy_config(struct krt_config *d, struct krt_config *s)
 {
 
 }
 
-void
-krt_sys_postconfig(struct krt_config *x)
+void krt_sys_postconfig(struct krt_config *x)
 {
 
 }
 
-void
-krt_sys_preconfig(struct config *c UNUSED)
+void krt_sys_preconfig(struct config *c UNUSED)
 {
 
 }
