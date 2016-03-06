@@ -169,10 +169,8 @@ else
 		ipv4:openbsd*)	sysdesc=bsd
 				;;
 		ipv6:cygwin*)	sysdesc=cygwin-v6
-				using_cygwin=yes
 				;;
 		ipv4:cygwin*)	sysdesc=cygwin
-				using_cygwin=yes
 				;;
 		*)		AC_MSG_ERROR([Cannot determine correct system configuration. Please use --with-sysconfig to set it manually.])
 				;;
@@ -185,6 +183,7 @@ if ! test -f $sysdesc ; then
 	AC_MSG_ERROR([The system configuration file is missing.])
 fi
 sysname=`echo $sysdesc | sed 's/\.h$//'`
+sysconf=`basename $sysname`
 AC_DEFINE_UNQUOTED(SYSCONF_INCLUDE, "$sysdesc")
 
 AC_MSG_CHECKING([system-dependent directories])
@@ -192,7 +191,17 @@ sysdep_dirs="`sed <$sysdesc '/^Link: /!d;s/^Link: \(.*\)$/\1/' | tr '\012' ' '` 
 AC_MSG_RESULT($sysdep_dirs)
 AC_SUBST(sysdep_dirs)
 
-if test "$using_cygwin" = yes ; then
+if test "$sysconf" = "cygwin" -o "$sysconf" = "cygwin-v6" ; then
+	if test "$prefix" = NONE; then
+		prefix="C:/bird"
+	fi
+	echo $prefix
+	bindir=$prefix
+	sbindir=$prefix
+	sysconfdir=$prefix
+	localstatedir=$prefix
+	runstatedir=$prefix
+	runtimedir=$prefix
 	export CYGWIN="${CYGWIN} winsymlinks"
 	AC_DEFINE(BIRD_CYGWIN)
 	LIBWIN_A="../sysdep/cygwin/libwin/libwin.a"
@@ -204,9 +213,6 @@ fi
 if test "$enable_debug" = yes ; then
 	CONFIG_FILE="bird$SUFFIX.conf"
 	CONTROL_SOCKET="bird$SUFFIX.ctl"
-elif test "$using_cygwin" = yes ; then
-	CONFIG_FILE="$prefix/bird$SUFFIX.conf"
-	CONTROL_SOCKET="$prefix/bird$SUFFIX.ctl"
 else
 	CONFIG_FILE="\$(sysconfdir)/bird$SUFFIX.conf"
 	CONTROL_SOCKET="$runtimedir/bird$SUFFIX.ctl"
