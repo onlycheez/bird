@@ -242,7 +242,7 @@ static char _is_route_valid(const MIB_IPFORWARD_ROW2 *route, int ipv)
       return 0;
     }
 
-    char i;
+    int i;
     for (i = 0; i < 8; i++)
     {
       if (route->NextHop.Ipv6.sin6_addr.u.Word[i] != 0)
@@ -280,7 +280,8 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
   if (retval != ERROR_SUCCESS)
   {
     win_log_api_error("GetIpForwardTable2", retval);
-    return;
+    *cnt = 0;
+    return NULL;
   }
 
   *cnt = routes->NumEntries;
@@ -343,7 +344,7 @@ struct wrtentry* win_rt_scan(int ipv, int *cnt)
 /**
  * Fill MIB_IPFORWARD_ROW2 strucuture with values from struct wrtentry.
  */
-static _wrtentry_to_ipforward_row(const struct wrtentry *entry,
+static void _wrtentry_to_ipforward_row(const struct wrtentry *entry,
   MIB_IPFORWARD_ROW2 *route, int ipv)
 {
   route->DestinationPrefix.PrefixLength = entry->pxlen;
