@@ -22,6 +22,7 @@
 #define DATETIME_FMT "%Y-%m-%d %H:%M:%S"
 #define DATETIME_LENGTH 32
 static char DATETIME_BUFFER[DATETIME_LENGTH];
+static const char *LOG_FILE_LOCATION = PREFIX_DIR "/win" SUFFIX ".log";
 static FILE *log_file = NULL;
 
 static const char* _current_formatted_datetime(void)
@@ -82,8 +83,6 @@ void win_log_api_error(const char *fc_name, DWORD retval)
  */
 void wlog(enum Wlog_level level, const char *format, ...)
 {
-  static const char *LOG_FILE_LOCATION = "C:\\bird\\win.log";
-  static FILE *log_file = NULL;
   if (!log_file)
   {
     log_file = fopen(LOG_FILE_LOCATION, "a");
@@ -106,7 +105,7 @@ void wlog(enum Wlog_level level, const char *format, ...)
       fprintf(log_file, "<DEBUG> ");
       break;
     default:
-      fprintf(log_file, "<???> ");
+      fprintf(log_file, " ");
   }
 
   va_list ap;
