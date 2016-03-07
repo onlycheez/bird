@@ -195,18 +195,20 @@ if test "$sysconf" = "cygwin" -o "$sysconf" = "cygwin-v6" ; then
 	if test "$prefix" = NONE; then
 		prefix="C:/bird"
 	fi
-	echo $prefix
 	bindir=$prefix
 	sbindir=$prefix
 	sysconfdir=$prefix
 	localstatedir=$prefix
 	runstatedir=$prefix
 	runtimedir=$prefix
-	export CYGWIN="${CYGWIN} winsymlinks"
+	makefiles="$makefiles sysdep/cygwin/libwin/Makefile:sysdep/cygwin/libwin/Makefile.in"
+	CFLAGS_WIN="-D_WIN32_WINNT=0x0601 -DNTDDI_VERSION=0x06010000 -DPREFIX_DIR=\\\"$prefix\\\" -DSUFFIX=\\\"$SUFFIX\\\""
+	AC_SUBST(CFLAGS_WIN)
+	export CYGWIN="$CYGWIN winsymlinks"
 	AC_DEFINE(BIRD_CYGWIN)
 	LIBWIN_A="../sysdep/cygwin/libwin/libwin.a"
 	AC_SUBST(LIBWIN_A)
-	WIN_LIBS="${LIBWIN_A} -liphlpapi"
+	WIN_LIBS="$LIBWIN_A -liphlpapi"
 	AC_SUBST(WIN_LIBS)
 fi
 

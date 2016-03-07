@@ -1,0 +1,22 @@
+
+SOURCES=win-krt.c win-log.c win-util.c
+HEADERS=win-krt.h win-log.h win-util.h win-types.h
+OBJECTS=win-krt.o win-log.o win-util.o
+CC=@CC@
+CFLAGS=@CFLAGS@ @CFLAGS_WIN@
+
+all: archive
+
+compile: $(SOURCES) $(HEADERS)
+	rm -f *.o libwin.a 2> /dev/null || echo ""
+	$(CC) $(CFLAGS) win-krt.c -c -o win-krt.o
+	$(CC) $(CFLAGS) win-log.c -c -o win-log.o
+	$(CC) $(CFLAGS) win-util.c -c -o win-util.o
+
+archive: compile $(OBJECTS)
+	ar cr libwin.a *.o
+
+distclean: clean
+
+clean:
+	rm -f *.o libwin.a
