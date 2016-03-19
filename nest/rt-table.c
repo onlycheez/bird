@@ -291,7 +291,7 @@ export_filter(struct announce_hook *ah, rte *rt0, rte **rt_free, ea_list **tmpa,
 	goto reject;
 
       stats->exp_updates_filtered++;
-      rte_trace_out(D_FILTERS, p, rt, "filtered out (export_filter)");
+      rte_trace_out(D_FILTERS, p, rt, "filtered out");
       goto reject;
     }
 
@@ -1199,7 +1199,7 @@ rte_update2(struct announce_hook *ah, net *net, rte *new, struct rte_src *src)
       if (filter == FILTER_REJECT)
 	{
 	  stats->imp_updates_filtered++;
-	  rte_trace_in(D_FILTERS, p, new, "filtered out (rte_update2 1)");
+	  rte_trace_in(D_FILTERS, p, new, "filtered out");
 
 	  if (! ah->in_keep_filtered)
 	    goto drop;
@@ -1217,7 +1217,7 @@ rte_update2(struct announce_hook *ah, net *net, rte *new, struct rte_src *src)
 	      if (fr > F_ACCEPT)
 		{
 		  stats->imp_updates_filtered++;
-		  rte_trace_in(D_FILTERS, p, new, "filtered out (rte_update2 2)");
+		  rte_trace_in(D_FILTERS, p, new, "filtered out");
 
 		  if (! ah->in_keep_filtered)
 		    goto drop;

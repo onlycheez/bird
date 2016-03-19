@@ -679,12 +679,12 @@ krt_got_route(struct krt_proto *p, rte *e)
 
     case  KRT_SRC_ALIEN:
       if (KRT_CF->learn)
-        krt_learn_scan(p, e);
+	krt_learn_scan(p, e);
       else
-        {
-          krt_trace_in_rl(&rl_alien, p, e, "[alien] ignored");
-          rte_free(e);
-        }
+	{
+	  krt_trace_in_rl(&rl_alien, p, e, "[alien] ignored");
+	  rte_free(e);
+	}
       return;
     }
 #endif
