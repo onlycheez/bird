@@ -718,6 +718,7 @@ graceful_restart_init(void)
 
 /**
  * graceful_restart_done - finalize graceful restart
+ * @t: unused
  *
  * When there are no locks on graceful restart, the functions finalizes the
  * graceful restart recovery. Protocols postponing route export until the end of
@@ -918,6 +919,9 @@ protos_build(void)
 #ifdef CONFIG_BFD
   proto_build(&proto_bfd);
   bfd_init_all();
+#endif
+#ifdef CONFIG_BABEL
+  proto_build(&proto_babel);
 #endif
 
   proto_pool = rp_new(&root_pool, "Protocols");
@@ -1260,6 +1264,7 @@ proto_want_export_down(struct proto *p)
     rt_feed_baby_abort(p);
 
   p->export_state = ES_DOWN;
+  p->stats.exp_routes = 0;
   proto_unlink_ahooks(p);
 }
 

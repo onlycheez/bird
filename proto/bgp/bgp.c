@@ -121,7 +121,8 @@ bgp_open(struct bgp_proto *p)
   bgp_counter++;
 
   if (p->cf->password)
-    if (sk_set_md5_auth(bgp_listen_sk, p->cf->remote_ip, p->cf->iface, p->cf->password) < 0)
+    if (sk_set_md5_auth(bgp_listen_sk, p->cf->source_addr, p->cf->remote_ip,
+			p->cf->iface, p->cf->password, p->cf->setkey) < 0)
       {
 	sk_log_error(bgp_listen_sk, p->p.name);
 	bgp_close(p, 0);
@@ -191,7 +192,8 @@ bgp_close(struct bgp_proto *p, int apply_md5)
   bgp_counter--;
 
   if (p->cf->password && apply_md5)
-    if (sk_set_md5_auth(bgp_listen_sk, p->cf->remote_ip, p->cf->iface, NULL) < 0)
+    if (sk_set_md5_auth(bgp_listen_sk, p->cf->source_addr, p->cf->remote_ip,
+			p->cf->iface, NULL, p->cf->setkey) < 0)
       sk_log_error(bgp_listen_sk, p->p.name);
 
   if (!bgp_counter)
@@ -373,6 +375,8 @@ bgp_conn_enter_established_state(struct bgp_conn *conn)
   /* For multi-hop BGP sessions */
   if (ipa_zero(p->source_addr))
     p->source_addr = conn->sk->saddr;
+
+  conn->sk->fast_rx = 0;
 
   p->conn = conn;
   p->last_error_class = 0;
@@ -666,6 +670,10 @@ bgp_keepalive_timeout(timer *t)
 
   DBG("BGP: Keepalive timer\n");
   bgp_schedule_packet(conn, PKT_KEEPALIVE);
+
+  /* Kick TX a bit faster */
+  if (ev_active(conn->tx_ev))
+    ev_run(conn->tx_ev);
 }
 
 static void
@@ -696,6 +704,7 @@ bgp_setup_sk(struct bgp_conn *conn, sock *s)
 {
   s->data = conn;
   s->err_hook = bgp_sock_err;
+  s->fast_rx = 1;
   conn->sk = s;
 }
 

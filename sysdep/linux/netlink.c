@@ -38,6 +38,10 @@
 #define MSG_TRUNC 0x20
 #endif
 
+#ifndef IFA_FLAGS
+#define IFA_FLAGS 8
+#endif
+
 #ifndef IFF_LOWER_UP
 #define IFF_LOWER_UP 0x10000
 #endif
@@ -125,7 +129,12 @@ nl_get_reply(struct nl_sock *nl)
 	{
 	  struct iovec iov = { nl->rx_buffer, NL_RX_SIZE };
 	  struct sockaddr_nl sa;
-	  struct msghdr m = { (struct sockaddr *) &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
+	  struct msghdr m = {
+	    .msg_name = &sa,
+	    .msg_namelen = sizeof(sa),
+	    .msg_iov = &iov,
+	    .msg_iovlen = 1,
+	  };
 	  int x = recvmsg(nl->fd, &m, 0);
 	  if (x < 0)
 	    die("nl_get_reply: %m");
@@ -242,18 +251,20 @@ static struct nl_want_attrs ifla_attr_want[BIRD_IFLA_MAX] = {
 };
 
 
-#define BIRD_IFA_MAX  (IFA_ANYCAST+1)
+#define BIRD_IFA_MAX  (IFA_FLAGS+1)
 
 #ifndef IPV6
 static struct nl_want_attrs ifa_attr_want4[BIRD_IFA_MAX] = {
   [IFA_ADDRESS]	  = { 1, 1, sizeof(ip4_addr) },
   [IFA_LOCAL]	  = { 1, 1, sizeof(ip4_addr) },
   [IFA_BROADCAST] = { 1, 1, sizeof(ip4_addr) },
+  [IFA_FLAGS]	  = { 1, 1, sizeof(u32) },
 };
 #else
 static struct nl_want_attrs ifa_attr_want6[BIRD_IFA_MAX] = {
   [IFA_ADDRESS]	  = { 1, 1, sizeof(ip6_addr) },
   [IFA_LOCAL]	  = { 1, 1, sizeof(ip6_addr) },
+  [IFA_FLAGS]	  = { 1, 1, sizeof(u32) },
 };
 #endif
 
@@ -606,6 +617,7 @@ nl_parse_addr(struct nlmsghdr *h, int scan)
   struct ifa ifa;
   struct iface *ifi;
   int scope;
+  u32 ifa_flags;
 
   if (!(i = nl_checkin(h, sizeof(*i))))
     return;
@@ -638,6 +650,11 @@ nl_parse_addr(struct nlmsghdr *h, int scan)
       return;
     }
 
+  if (a[IFA_FLAGS])
+    ifa_flags = rta_get_u32(a[IFA_FLAGS]);
+  else
+    ifa_flags = i->ifa_flags;
+
   ifi = if_find_by_index(i->ifa_index);
   if (!ifi)
     {
@@ -647,8 +664,14 @@ nl_parse_addr(struct nlmsghdr *h, int scan)
 
   bzero(&ifa, sizeof(ifa));
   ifa.iface = ifi;
-  if (i->ifa_flags & IFA_F_SECONDARY)
+  if (ifa_flags & IFA_F_SECONDARY)
     ifa.flags |= IA_SECONDARY;
+
+#ifdef IPV6
+  /* Ignore tentative addresses silently */
+  if (ifa_flags & IFA_F_TENTATIVE)
+    return;
+#endif
 
   /* IFA_LOCAL can be unset for IPv6 interfaces */
   memcpy(&ifa.ip, RTA_DATA(a[IFA_LOCAL] ? : a[IFA_ADDRESS]), sizeof(ifa.ip));
@@ -1102,7 +1125,8 @@ nl_parse_route(struct nlmsghdr *h, int scan)
   e->net = net;
   e->u.krt.src = src;
   e->u.krt.proto = i->rtm_protocol;
-  e->u.krt.type = i->rtm_type;
+  e->u.krt.seen = 0;
+  e->u.krt.best = 0;
   e->u.krt.metric = 0;
 
   if (a[RTA_PRIORITY])
@@ -1230,7 +1254,12 @@ nl_async_hook(sock *sk, int size UNUSED)
 {
   struct iovec iov = { nl_async_rx_buffer, NL_RX_SIZE };
   struct sockaddr_nl sa;
-  struct msghdr m = { (struct sockaddr *) &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
+  struct msghdr m = {
+    .msg_name = &sa,
+    .msg_namelen = sizeof(sa),
+    .msg_iov = &iov,
+    .msg_iovlen = 1,
+  };
   struct nlmsghdr *h;
   int x;
   uint len;

@@ -50,7 +50,7 @@ static linpool *rte_update_pool;
 
 static list routing_tables;
 
-static void rt_format_via(rte *e, byte *via);
+static byte *rt_format_via(rte *e);
 static void rt_free_hostcache(rtable *tab);
 static void rt_notify_hostcache(rtable *tab, net *net);
 static void rt_update_hostcache(rtable *tab);
@@ -227,10 +227,7 @@ rte_mergable(rte *pri, rte *sec)
 static void
 rte_trace(struct proto *p, rte *e, int dir, char *msg)
 {
-  byte via[STD_ADDRESS_P_LENGTH+32];
-
-  rt_format_via(e, via);
-  log(L_TRACE "%s %c %s %I/%d %s", p->name, dir, msg, e->net->n.prefix, e->net->n.pxlen, via);
+  log(L_TRACE "%s %c %s %I/%d %s", p->name, dir, msg, e->net->n.prefix, e->net->n.pxlen, rt_format_via(e));
 }
 
 static inline void
@@ -717,16 +714,20 @@ rt_notify_merged(struct announce_hook *ah, net *net, rte *new_changed, rte *old_
  * @net: network in question
  * @new: the new route to be announced
  * @old: the previous route for the same network
+ * @new_best: the new best route for the same network
+ * @old_best: the previous best route for the same network
+ * @before_old: The previous route before @old for the same network.
+ * 		If @before_old is NULL @old was the first.
  *
  * This function gets a routing table update and announces it
  * to all protocols that acccepts given type of route announcement
  * and are connected to the same table by their announcement hooks.
  *
- * Route announcement of type RA_OPTIMAL si generated when optimal
+ * Route announcement of type %RA_OPTIMAL si generated when optimal
  * route (in routing table @tab) changes. In that case @old stores the
  * old optimal route.
  *
- * Route announcement of type RA_ANY si generated when any route (in
+ * Route announcement of type %RA_ANY si generated when any route (in
  * routing table @tab) changes In that case @old stores the old route
  * from the same protocol.
  *
@@ -1616,6 +1617,7 @@ again:
 
 /**
  * rt_prune_table - prune a routing table
+ * @tab: a routing table for pruning
  *
  * This function scans the routing table @tab and removes routes belonging to
  * flushing protocols, discarded routes and also stale network entries, in a
@@ -1775,7 +1777,7 @@ rt_next_hop_update_net(rtable *tab, net *n)
   /* FIXME: Better announcement of merged routes */
   rte_announce_i(tab, RA_MERGED, n, new, old_best, new, old_best);
 
-   if (free_old_best)
+  if (free_old_best)
     rte_free_quick(old_best);
 
   return count;
@@ -2359,10 +2361,13 @@ rta_set_recursive_next_hop(rtable *dep, rta *a, rtable *tab, ip_addr *gw, ip_add
  *  CLI commands
  */
 
-static void
-rt_format_via(rte *e, byte *via)
+static byte *
+rt_format_via(rte *e)
 {
   rta *a = e->attrs;
+
+  /* Max text length w/o IP addr and interface name is 16 */
+  static byte via[STD_ADDRESS_P_LENGTH+sizeof(a->iface->name)+16];
 
   switch (a->dest)
     {
@@ -2374,12 +2379,13 @@ rt_format_via(rte *e, byte *via)
     case RTD_MULTIPATH:	bsprintf(via, "multipath"); break;
     default:		bsprintf(via, "???");
     }
+  return via;
 }
 
 static void
 rt_show_rte(struct cli *c, byte *ia, rte *e, struct rt_show_data *d, ea_list *tmpa)
 {
-  byte via[STD_ADDRESS_P_LENGTH+32], from[STD_ADDRESS_P_LENGTH+8];
+  byte from[STD_ADDRESS_P_LENGTH+8];
   byte tm[TM_DATETIME_BUFFER_SIZE], info[256];
   rta *a = e->attrs;
   int primary = (e->net->routes == e);
@@ -2387,7 +2393,6 @@ rt_show_rte(struct cli *c, byte *ia, rte *e, struct rt_show_data *d, ea_list *tm
   void (*get_route_info)(struct rte *, byte *buf, struct ea_list *attrs);
   struct mpnh *nh;
 
-  rt_format_via(e, via);
   tm_format_datetime(tm, &config->tf_route, e->lastmod);
   if (ipa_nonzero(a->from) && !ipa_equal(a->from, a->gw))
     bsprintf(from, " from %I", a->from);
@@ -2408,7 +2413,7 @@ rt_show_rte(struct cli *c, byte *ia, rte *e, struct rt_show_data *d, ea_list *tm
     get_route_info(e, info, tmpa);
   else
     bsprintf(info, " (%d)", e->pref);
-  cli_printf(c, -1007, "%-18s %s [%s %s%s]%s%s", ia, via, a->src->proto->name,
+  cli_printf(c, -1007, "%-18s %s [%s %s%s]%s%s", ia, rt_format_via(e), a->src->proto->name,
 	     tm, from, primary ? (sync_error ? " !" : " *") : "", info);
   for (nh = a->nexthops; nh; nh = nh->next)
     cli_printf(c, -1007, "\tvia %I on %s weight %d", nh->gw, nh->iface->name, nh->weight + 1);

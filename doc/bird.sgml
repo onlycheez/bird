@@ -171,6 +171,11 @@ BIRD executable by configuring out routing protocols you don't use, and
 	<tag>-f</tag>
 	run bird in foreground.
 
+	<tag>-l</tag>
+	look for a configuration file and a communication socket in the current
+	working directory instead of in default system locations. However, paths
+	specified by options <cf/-c/, <cf/-s/ have higher priority.
+
 	<tag>-R</tag>
 	apply graceful restart recovery after start.
 </descrip>
@@ -190,7 +195,7 @@ privileges (capabilities CAP_NET_*). Note that the control socket is created
 before the privileges are dropped, but the config file is read after that. The
 privilege restriction is not implemented in BSD port of BIRD.
 
-<p>A nonprivileged user (as an argument to <cf/-u/ options) may be the user
+<p>An unprivileged user (as an argument to <cf/-u/ options) may be the user
 <cf/nobody/, but it is suggested to use a new dedicated user account (like
 <cf/bird/). The similar considerations apply for the group option, but there is
 one more condition -- the users in the same group can use <file/birdc/ to
@@ -283,7 +288,7 @@ extensive way.
 a comment, whitespace characters are treated as a single space. If there's a
 variable number of options, they are grouped using the <cf/{ }/ brackets. Each
 option is terminated by a <cf/;/. Configuration is case sensitive. There are two
-ways how to name symbols (like protocol names, filter names, constats etc.). You
+ways how to name symbols (like protocol names, filter names, constants etc.). You
 can either use a simple string starting with a letter followed by any
 combination of letters and numbers (e.g. "R123", "myfilter", "bgp5") or you can
 enclose the name into apostrophes (<cf/'/) and than you can use any combination
@@ -318,8 +323,9 @@ protocol rip {
 <p><descrip>
 	<tag>include "<m/filename/"</tag>
 	This statement causes inclusion of a new file. <m/Filename/ could also
-	be a wildcard. The maximal depth is 8. Note that this statement could be
-	used anywhere in the config file, not just as a top-level option.
+	be a wildcard, in that case matching files are included in alphabetic
+	order. The maximal depth is 8. Note that this statement could be used
+	anywhere in the config file, not just as a top-level option.
 
 	<tag><label id="dsc-log">log "<m/filename/"|syslog [name <m/name/]|stderr all|{ <m/list of classes/ }</tag>
 	Set logging of messages having the given class (either <cf/all/ or
@@ -604,8 +610,8 @@ agreement").
 	options, in that case for given interface the first matching interface
 	option is used.
 
-	This option is allowed in BFD, Direct, OSPF, RAdv and RIP protocols, but
-	in OSPF protocol it is used in the <cf/area/ subsection.
+	This option is allowed in Babel, BFD, Direct, OSPF, RAdv and RIP
+	protocols, but in OSPF protocol it is used in the <cf/area/ subsection.
 
 	Default: none.
 
@@ -661,7 +667,7 @@ agreement").
 
 <descrip>
 	<tag>id <M>num</M></tag>
-	ID of the password, (0-255). If it's not used, BIRD will choose ID based
+	ID of the password, (1-255). If it is not used, BIRD will choose ID based
 	on an order of the password item in the interface. For example, second
 	password item in one interface will have default ID 2. ID is used by
 	some routing protocols to identify which password was used to
@@ -711,6 +717,10 @@ This argument can be omitted if there exists only a single instance.
 	Show router status, that is BIRD version, uptime and time from last
 	reconfiguration.
 
+	<tag>show interfaces [summary]</tag>
+	Show the list of interfaces. For each interface, print its type, state,
+	MTU and addresses assigned.
+
 	<tag>show protocols [all]</tag>
 	Show list of protocol instances along with tables they are connected to
 	and protocol status, possibly giving verbose information, if <cf/all/ is
@@ -738,15 +748,17 @@ This argument can be omitted if there exists only a single instance.
 	Show contents of an OSPF LSA database. Options could be used to filter
 	entries.
 
+	<tag>show rip interfaces [<m/name/] ["<m/interface/"]</tag>
+	Show detailed information about RIP interfaces.
+
+	<tag>show rip neighbors [<m/name/] ["<m/interface/"]</tag>
+	Show a list of RIP neighbors and associated state.
+
 	<tag>show static [<m/name/]</tag>
 	Show detailed information about static routes.
 
 	<tag>show bfd sessions [<m/name/]</tag>
 	Show information about BFD sessions.
-
-	<tag>show interfaces [summary]</tag>
-	Show the list of interfaces. For each interface, print its type, state,
-	MTU and addresses assigned.
 
 	<tag>show symbols [table|filter|function|protocol|template|roa|<m/symbol/]</tag>
 	Show the list of symbols defined in the configuration (names of
@@ -823,7 +835,7 @@ This argument can be omitted if there exists only a single instance.
 	configuration could be either confirmed using <cf/configure confirm/
 	command, or it will be reverted to the old one when the config timer
 	expires. This is useful for cases when reconfiguration breaks current
-	routing and a router becames inaccessible for an administrator. The
+	routing and a router becomes inaccessible for an administrator. The
 	config timeout expiration is equivalent to <cf/configure undo/
 	command. The timeout duration could be specified, default is 300 s.
 
@@ -1004,7 +1016,7 @@ foot).
 	of type <cf/string/, print such variables, use standard string
 	comparison operations (e.g. <cf/=, !=, &lt;, &gt;, &lt;=, &gt;=/), but
 	you can't concatenate two strings. String literals are written as
-	<cf/"This is a string constant"/. Additionaly matching <cf/&tilde;/
+	<cf/"This is a string constant"/. Additionally matching <cf/&tilde;/
 	operator could be used to match a string value against a shell pattern
 	(represented also as a string).
 
@@ -1023,7 +1035,7 @@ foot).
 	or <cf><m>ipaddress</m>/<m>netmask</m></cf>. There are two special
 	operators on prefixes: <cf/.ip/ which extracts the IP address from the
 	pair, and <cf/.len/, which separates prefix length from the pair.
-	So <cf>1.2.0.0/16.pxlen = 16</cf> is true.
+	So <cf>1.2.0.0/16.len = 16</cf> is true.
 
 	<tag/ec/
 	This is a specialized type used to represent BGP extended community
@@ -1153,8 +1165,10 @@ foot).
  	is 4 3 2 1, then: <tt>bgp_path &tilde; [= * 4 3 * =]</tt> is true,
 	but <tt>bgp_path &tilde; [= * 4 5 * =]</tt> is false. BGP mask
 	expressions can also contain integer expressions enclosed in parenthesis
-	and integer variables, for example <tt>[= * 4 (1+2) a =]</tt>. There is
-	also old syntax that uses / .. / instead of [= .. =] and ? instead of *.
+	and integer variables, for example <tt>[= * 4 (1+2) a =]</tt>. You can
+        also use ranges, for example <tt>[= * 3..5 2 100..200 * =]</tt>.
+        There is also old (deprecated) syntax that uses / .. / instead of [= .. =]
+        and ? instead of *.
 
 	<tag/clist/
 	Clist is similar to a set, except that unlike other sets, it can be
@@ -1300,7 +1314,7 @@ clist for most purposes.
 	<cf/RTS_DUMMY/, <cf/RTS_STATIC/, <cf/RTS_INHERIT/, <cf/RTS_DEVICE/,
 	<cf/RTS_STATIC_DEVICE/, <cf/RTS_REDIRECT/, <cf/RTS_RIP/, <cf/RTS_OSPF/,
 	<cf/RTS_OSPF_IA/, <cf/RTS_OSPF_EXT1/, <cf/RTS_OSPF_EXT2/, <cf/RTS_BGP/,
-	<cf/RTS_PIPE/.
+	<cf/RTS_PIPE/, <cf/RTS_BABEL/.
 
 	<tag><m/enum/ cast</tag>
 	Route type (Currently <cf/RTC_UNICAST/ for normal routes,
@@ -1367,6 +1381,130 @@ corresponding protocol sections.
 
 
 <chapt>Protocols
+
+<sect>Babel
+
+<sect1>Introduction
+
+<p>The Babel protocol (RFC6126) is a loop-avoiding distance-vector routing
+protocol that is robust and efficient both in ordinary wired networks and in
+wireless mesh networks. Babel is conceptually very simple in its operation and
+"just works" in its default configuration, though some configuration is possible
+and in some cases desirable.
+
+<p>While the Babel protocol is dual stack (i.e., can carry both IPv4 and IPv6
+routes over the same IPv6 transport), BIRD presently implements only the IPv6
+subset of the protocol. No Babel extensions are implemented, but the BIRD
+implementation can coexist with implementations using the extensions (and will
+just ignore extension messages).
+
+<p>The Babel protocol implementation in BIRD is currently in alpha stage.
+
+<sect1>Configuration
+
+<p>Babel supports no global configuration options apart from those common to all
+other protocols, but supports the following per-interface configuration options:
+
+<code>
+protocol babel [<name>] {
+	interface <interface pattern> {
+		type <wired|wireless>;
+		rxcost <number>;
+		hello interval <number>;
+		update interval <number>;
+		port <number>;
+		tx class|dscp <number>;
+		tx priority <number>;
+		rx buffer <number>;
+		tx length <number>;
+		check link <switch>;
+	};
+}
+</code>
+
+<descrip>
+      <tag>type wired|wireless </tag>
+      This option specifies the interface type: Wired or wireless. Wired
+      interfaces are considered more reliable, and so the default hello
+      interval is higher, and a neighbour is considered unreachable after only
+      a small number of "hello" packets are lost. On wireless interfaces,
+      hello packets are sent more often, and the ETX link quality estimation
+      technique is used to compute the metrics of routes discovered over this
+      interface. This technique will gradually degrade the metric of routes
+      when packets are lost rather than the more binary up/down mechanism of
+      wired type links. Default: <cf/wired/.
+
+      <tag>rxcost <m/num/</tag>
+      This specifies the RX cost of the interface. The route metrics will be
+      computed from this value with a mechanism determined by the interface
+      <cf/type/. Default: 96 for wired interfaces, 256 for wireless.
+
+      <tag>hello interval <m/num/</tag>
+      Interval at which periodic "hello" messages are sent on this interface,
+      in seconds. Default: 4 seconds.
+
+      <tag>update interval <m/num/</tag>
+      Interval at which periodic (full) updates are sent. Default: 4 times the
+      hello interval.
+
+      <tag>port <m/number/</tag>
+      This option selects an UDP port to operate on. The default is to operate
+      on port 6696 as specified in the Babel RFC.
+
+      <tag>tx class|dscp|priority <m/number/</tag>
+      These options specify the ToS/DiffServ/Traffic class/Priority of the
+      outgoing Babel packets. See <ref id="dsc-prio" name="tx class"> common
+      option for detailed description.
+
+      <tag>rx buffer <m/number/</tag>
+      This option specifies the size of buffers used for packet processing.
+      The buffer size should be bigger than maximal size of received packets.
+      The default value is the interface MTU, and the value will be clamped to a
+      minimum of 512 bytes + IP packet overhead.
+
+      <tag>tx length <m/number/</tag>
+      This option specifies the maximum length of generated Babel packets. To
+      avoid IP fragmentation, it should not exceed the interface MTU value.
+      The default value is the interface MTU value, and the value will be
+      clamped to a minimum of 512 bytes + IP packet overhead.
+
+      <tag>check link <m/switch/</tag>
+      If set, the hardware link state (as reported by OS) is taken into
+      consideration. When the link disappears (e.g. an ethernet cable is
+      unplugged), neighbors are immediately considered unreachable and all
+      routes received from them are withdrawn. It is possible that some
+      hardware drivers or platforms do not implement this feature. Default:
+      yes.
+</descrip>
+
+<sect1>Attributes
+
+<p>Babel defines just one attribute: the internal babel metric of the route. It
+is exposed as the <cf/babel_metric/ attribute and has range from 1 to infinity
+(65535).
+
+<sect1>Example
+
+<p><code>
+protocol babel {
+	interface "eth*" {
+		type wired;
+	};
+	interface "wlan0", "wlan1" {
+		type wireless;
+		hello interval 1;
+		rxcost 512;
+	};
+	interface "tap0";
+
+	# This matches the default of babeld: redistribute all addresses
+	# configured on local interfaces, plus re-distribute all routes received
+	# from other babel peers.
+
+	export where (source = RTS_DEVICE) || (source = RTS_BABEL);
+}
+</code>
+
 
 <sect><label id="sect-bfd">BFD
 
@@ -1471,7 +1609,7 @@ protocol bfd [&lt;name&gt;] {
 
 	The session is identified by the IP address of the neighbor, with
 	optional specification of used interface and local IP. By default
-	the neighbor must be directly connected, unless the the session is
+	the neighbor must be directly connected, unless the session is
 	configured as multihop. Note that local IP must be specified for
 	multihop sessions.
 </descrip>
@@ -1514,7 +1652,7 @@ protocol bfd [&lt;name&gt;] {
 	Default: 5.
 
 	<tag>passive <m/switch/</tag>
-	Generally, both BFD session endpoinds try to establish the session by
+	Generally, both BFD session endpoints try to establish the session by
 	sending control packets to the other side. This option allows to enable
 	passive mode, which means that the router does not send BFD packets
 	until it has received one from the other side. Default: disabled.
@@ -1752,9 +1890,20 @@ using the following configuration parameters:
 	only. Default: disabled.
 
 	<tag>password <m/string/</tag>
-	Use this password for MD5 authentication of BGP sessions. Default: no
-	authentication. Password has to be set by external utility
-	(e.g. setkey(8)) on BSD systems.
+	Use this password for MD5 authentication of BGP sessions (RFC 2385).
+	When used on BSD systems, see also <cf/setkey/ option below. Default:
+	no authentication.
+
+	<tag>setkey <m/switch/</tag>
+	On BSD systems, keys for TCP MD5 authentication are stored in the global
+	SA/SP database, which can be accessed by external utilities (e.g.
+	setkey(8)). BIRD configures security associations in the SA/SP database
+	automatically based on <cf/password/ options (see above), this option
+	allows to disable automatic updates by BIRD when manual configuration by
+	external utilities is preferred. Note that automatic SA/SP database
+	updates are currently implemented only for FreeBSD. Passwords have to be
+	set manually by an external utility on NetBSD and OpenBSD. Default:
+	enabled (ignored on non-FreeBSD).
 
 	<tag>passive <m/switch/</tag>
 	Standard BGP behavior is both initiating outgoing connections and
@@ -2149,7 +2298,7 @@ conditions, because a lower priority IGP route for the same network is not
 exported to the kernel routing table. This is an issue on BSD systems only, as
 on Linux systems BIRD cannot change non-BIRD route in the kernel routing table.
 
-<p>The only configurable thing about direct is what interfaces it watches:
+<p>There are just few configuration options for the Direct protocol:
 
 <p><descrip>
 	<tag>interface <m/pattern [, ...]/</tag>
@@ -2160,6 +2309,12 @@ on Linux systems BIRD cannot change non-BIRD route in the kernel routing table.
 	interfaces), just use this clause. See <ref id="dsc-iface" name="interface">
 	common option for detailed description. The Direct protocol uses
 	extended interface clauses.
+
+	<tag>check link <m/switch/</tag>
+	If enabled, a hardware link state (reported by OS) is taken into
+	consideration. Routes for directly connected networks are generated only
+	if link up is reported and they are withdrawn when link disappears
+	(e.g., an ethernet cable is unplugged). Default value is no.
 </descrip>
 
 <p>Direct device routes don't contain any specific attributes.
@@ -2616,8 +2771,8 @@ protocol ospf &lt;name&gt; {
 	updates. Default value is 5.
 
 	<tag>priority <M>num</M></tag>
-	On every multiple access network (e.g., the Ethernet) Designed Router
-	and Backup Designed router are elected. These routers have some special
+	On every multiple access network (e.g., the Ethernet) Designated Router
+	and Backup Designated router are elected. These routers have some special
 	functions in the flooding process. Higher priority increases preferences
 	in this election. Routers with priority 0 are not eligible. Default
 	value is 1.
@@ -2633,7 +2788,7 @@ protocol ospf &lt;name&gt; {
 	<tag>dead <M>num</M></tag>
 	When the router does not receive any messages from a neighbor in
 	<m/dead/ seconds, it will consider the neighbor down. If both directives
-	<cf/dead count/ and <cf/dead/ are used, <cf/dead/ has precendence.
+	<cf/dead count/ and <cf/dead/ are used, <cf/dead/ has precedence.
 
 	<tag>secondary <M>switch</M></tag>
 	On BSD systems, older versions of BIRD supported OSPFv2 only for the
@@ -3364,6 +3519,11 @@ protocol rip [&lt;name&gt;] {
 	RIP, the option is not supported for RIPng, as no further versions are
 	defined.
 
+	<tag>version only <m/switch/</tag>
+	Regardless of RIP version configured for the interface, BIRD accepts
+	incoming packets of any RIP version. This option restrict accepted
+	packets to the configured version. Default: no.
+
 	<tag>split horizon <m/switch/</tag>
 	Split horizon is a scheme for preventing routing loops. When split
 	horizon is active, routes are not regularly propagated back to the
@@ -3508,7 +3668,7 @@ default route to prevent routing loops).
 packets to a neighboring router, multipath routes specifying several (possibly
 weighted) neighboring routers, device routes specifying forwarding to hosts on a
 directly connected network, recursive routes computing their nexthops by doing
-route table lookups for a given IP and special routes (sink, blackhole etc.)
+route table lookups for a given IP, and special routes (sink, blackhole etc.)
 which specify a special action to be done instead of forwarding the packet.
 
 <p>When the particular destination is not available (the interface is down or
@@ -3516,8 +3676,26 @@ the next hop of the route is not a neighbor at the moment), Static just
 uninstalls the route from the table it is connected to and adds it again as soon
 as the destination becomes adjacent again.
 
-<p>The Static protocol does not have many configuration options. The definition
-of the protocol contains mainly a list of static routes:
+<p>There are three classes of definitions in Static protocol configuration --
+global options, static route definitions, and per-route options. Usually, the
+definition of the protocol contains mainly a list of static routes.
+
+<p>Global options:
+
+<descrip>
+	<tag>check link <m/switch/</tag>
+	If set, hardware link states of network interfaces are taken into
+	consideration.  When link disappears (e.g. ethernet cable is unplugged),
+	static routes directing to that interface are removed. It is possible
+	that some hardware drivers or platforms do not implement this feature.
+	Default: off.
+
+	<tag>igp table <m/name/</tag>
+	Specifies a table that is used for route table lookups of recursive
+	routes. Default: the same table as the protocol is connected to.
+</descrip>
+
+<p>Route definitions (each may also contain a block of per-route options):
 
 <descrip>
 	<tag>route <m/prefix/ via <m/ip/</tag>
@@ -3525,9 +3703,9 @@ of the protocol contains mainly a list of static routes:
 	interface can be specified as a part of the address (e.g.,
 	<cf/via fe80::1234%eth0/).
 
-	<tag>route <m/prefix/ multipath via <m/ip/ [weight <m/num/] [via ...]</tag>
+	<tag>route <m/prefix/ multipath via <m/ip/ [weight <m/num/] [bfd <m/switch/] [via ...]</tag>
 	Static multipath route. Contains several nexthops (gateways), possibly
- 	with their weights.
+	with their weights.
 
 	<tag>route <m/prefix/ via <m/"interface"/</tag>
 	Static device route through an interface to hosts on a directly
@@ -3541,17 +3719,33 @@ of the protocol contains mainly a list of static routes:
 	Special routes specifying to silently drop the packet, return it as
 	unreachable or return it as administratively prohibited. First two
 	targets are also known as <cf/drop/ and <cf/reject/.
+</descrip>
 
-	<tag>check link <m/switch/</tag>
-	If set, hardware link states of network interfaces are taken into
-	consideration.  When link disappears (e.g. ethernet cable is unplugged),
-	static routes directing to that interface are removed. It is possible
-	that some hardware drivers or platforms do not implement this feature.
-	Default: off.
+<p>Per-route options:
 
-	<tag>igp table <m/name/</tag>
-	Specifies a table that is used for route table lookups of recursive
-	routes. Default: the same table as the protocol is connected to.
+<descrip>
+	<tag>bfd <m/switch/</tag>
+	The Static protocol could use BFD protocol for next hop liveness
+	detection. If enabled, a BFD session to the route next hop is created
+	and the static route is BFD-controlled -- the static route is announced
+	only if the next hop liveness is confirmed by BFD. If the BFD session
+	fails, the static route is removed. Note that this is a bit different
+	compared to other protocols, which may use BFD as an advisory mechanism
+	for fast failure detection but ignores it if a BFD session is not even
+	established.
+
+	This option can be used for static routes with a direct next hop, or
+	also for for individual next hops in a static multipath route (see
+	above). Note that BFD protocol also has to be configured, see
+	<ref id="sect-bfd" name="BFD"> section for details. Default value is no.
+
+	<tag><m/filter expression/</tag>
+	This is a special option that allows filter expressions to be configured
+	on per-route basis. Can be used multiple times. These expressions are
+	evaluated when the route is originated, similarly to the import filter
+	of the static protocol. This is especially useful for configuring route
+	attributes, e.g., <cf/ospf_metric1 = 100;/ for a route that will be
+	exported to the OSPF protocol.
 </descrip>
 
 <p>Static routes have no specific attributes.
@@ -3560,14 +3754,23 @@ of the protocol contains mainly a list of static routes:
 
 <p><code>
 protocol static {
-	table testable;			 # Connect to a non-default routing table
+	table testable;			# Connect to a non-default routing table
+	check link;			# Advertise routes only if link is up
 	route 0.0.0.0/0 via 198.51.100.130; # Default route
-	route 10.0.0.0/8 multipath	 # Multipath route
+	route 10.0.0.0/8 multipath	# Multipath route
 		via 198.51.100.10 weight 2
-		via 198.51.100.20
+		via 198.51.100.20 bfd	# BFD-controlled next hop
 		via 192.0.2.1;
 	route 203.0.113.0/24 unreachable; # Sink route
-	route 10.2.0.0/24 via "arc0";	 # Secondary network
+	route 10.2.0.0/24 via "arc0";	# Secondary network
+	route 192.168.10.0/24 via 198.51.100.100 {
+		ospf_metric1 = 20;	# Set extended attribute
+	}
+	route 192.168.10.0/24 via 198.51.100.100 {
+		ospf_metric2 = 100;	# Set extended attribute
+		ospf_tag = 2;		# Set extended attribute
+		bfd;			# BFD-controlled route
+	}
 }
 </code>
 

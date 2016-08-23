@@ -79,6 +79,10 @@ pm_format(struct f_path_mask *p, buffer *buf)
       buffer_puts(buf, "* ");
       break;
 
+    case PM_ASN_RANGE:
+      buffer_print(buf, "%u..%u ", p->val, p->val2);
+      break;
+
     case PM_ASN_EXPR:
       buffer_print(buf, "%u ", f_eval_asn((struct f_inst *) p->val));
       break;
@@ -159,18 +163,29 @@ val_compare(struct f_val v1, struct f_val v2)
 }
 
 static int
-pm_path_same(struct f_path_mask *m1, struct f_path_mask *m2)
+pm_same(struct f_path_mask *m1, struct f_path_mask *m2)
 {
   while (m1 && m2)
   {
-    if ((m1->kind != m2->kind) || (m1->val != m2->val))
+    if (m1->kind != m2->kind)
       return 0;
+
+    if (m1->kind == PM_ASN_EXPR)
+    {
+      if (!i_same((struct f_inst *) m1->val, (struct f_inst *) m2->val))
+	return 0;
+    }
+    else
+    {
+      if ((m1->val != m2->val) || (m1->val2 != m2->val2))
+	return 0;
+    }
 
     m1 = m1->next;
     m2 = m2->next;
   }
 
- return !m1 && !m2;
+  return !m1 && !m2;
 }
 
 /**
@@ -195,7 +210,7 @@ val_same(struct f_val v1, struct f_val v2)
 
   switch (v1.type) {
   case T_PATH_MASK:
-    return pm_path_same(v1.val.path_mask, v2.val.path_mask);
+    return pm_same(v1.val.path_mask, v2.val.path_mask);
   case T_PATH:
   case T_CLIST:
   case T_ECLIST:
@@ -1446,7 +1461,8 @@ i_same(struct f_inst *f1, struct f_inst *f2)
   case P('A','p'): TWOARGS; break;
   case P('C','a'): TWOARGS; break;
   case P('a','f'):
-  case P('a','l'): ONEARG; break;
+  case P('a','l'):
+  case P('a','L'): ONEARG; break;
   case P('R','C'):
     TWOARGS;
     /* Does not really make sense - ROA check resuls may change anyway */

@@ -8,3 +8,4 @@ obj/
 sysdep/cygwin/libwin/*.o
 sysdep/cygwin/libwin/libwin.a
 bird*.exe
+

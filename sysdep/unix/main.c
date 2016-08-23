@@ -450,6 +450,7 @@ cli_connect(sock *s, int size UNUSED)
   s->err_hook = cli_err;
   s->data = c = cli_new(s);
   s->pool = c->pool;		/* We need to have all the socket buffers allocated in the cli pool */
+  s->fast_rx = 1;
   c->rx_pos = c->rx_buf;
   c->rx_aux = NULL;
   rmove(s, c->pool);
@@ -466,6 +467,7 @@ cli_init_unix(uid_t use_uid, gid_t use_gid)
   s->type = SK_UNIX_PASSIVE;
   s->rx_hook = cli_connect;
   s->rbsize = 1024;
+  s->fast_rx = 1;
 
   /* Return value intentionally ignored */
   unlink(path_control_socket);
@@ -615,7 +617,7 @@ signal_init(void)
  *	Parsing of command-line arguments
  */
 
-static char *opt_list = "c:dD:ps:P:u:g:fR";
+static char *opt_list = "c:dD:ps:P:u:g:flR";
 static int parse_and_exit;
 char *bird_name;
 static char *use_user;
@@ -625,7 +627,7 @@ static int run_in_foreground = 0;
 static void
 usage(void)
 {
-  fprintf(stderr, "Usage: %s [-c <config-file>] [-d] [-D <debug-file>] [-p] [-s <control-socket>] [-P <pid-file>] [-u <user>] [-g <group>] [-f] [-R]\n", bird_name);
+  fprintf(stderr, "Usage: %s [-c <config-file>] [-d] [-D <debug-file>] [-p] [-s <control-socket>] [-P <pid-file>] [-u <user>] [-g <group>] [-f] [-l] [-R]\n", bird_name);
   exit(1);
 }
 
@@ -692,6 +694,8 @@ get_gid(const char *s)
 static void
 parse_args(int argc, char **argv)
 {
+  int config_changed = 0;
+  int socket_changed = 0;
   int c;
 
   bird_name = get_bird_name(argv[0], "bird");
@@ -710,6 +714,7 @@ parse_args(int argc, char **argv)
       {
       case 'c':
 	config_name = optarg;
+	config_changed = 1;
 	break;
       case 'd':
 	debug_flag |= 1;
@@ -723,6 +728,7 @@ parse_args(int argc, char **argv)
 	break;
       case 's':
 	path_control_socket = optarg;
+	socket_changed = 1;
 	break;
       case 'P':
 	pid_file = optarg;
@@ -735,6 +741,12 @@ parse_args(int argc, char **argv)
 	break;
       case 'f':
 	run_in_foreground = 1;
+	break;
+      case 'l':
+	if (!config_changed)
+	  config_name = xbasename(config_name);
+	if (!socket_changed)
+	  path_control_socket = xbasename(path_control_socket);
 	break;
       case 'R':
 	graceful_restart_recovery();
